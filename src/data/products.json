@@ -1,0 +1,234 @@
+{
+  "stage": {
+    "width": 1280,
+    "height": 720,
+    "defaultScale": 0.82
+  },
+  "defaults": {
+    "excavatorId": "ex-360-pro",
+    "bucketId": "bk-rock-18",
+    "toothId": "tooth-hd-x"
+  },
+  "excavators": [
+    {
+      "id": "ex-260",
+      "name": "HX260L 中型挖掘机",
+      "series": "HX Series",
+      "tonnage": "26 t",
+      "image": "/assets/equipment/excavator-hx260.svg",
+      "anchor": { "x": 430, "y": 470 },
+      "hotspot": { "x": 610, "y": 430, "radius": 42, "label": "快换接口" },
+      "dimensions": { "width": 820, "height": 420 },
+      "compatibleBucketIds": ["bk-earth-14", "bk-rock-18"],
+      "description": "适合市政、土方和中等强度矿山工况的通用型主机。",
+      "sellingPoints": ["油耗稳定", "动臂响应快", "适配 1.4-1.8 m3 挖斗"],
+      "notes": "推荐搭配中载或加强型斗齿，适合连续装车作业。"
+    },
+    {
+      "id": "ex-360-pro",
+      "name": "HX360P 重载挖掘机",
+      "series": "HX Pro Series",
+      "tonnage": "36 t",
+      "image": "/assets/equipment/excavator-hx360.svg",
+      "anchor": { "x": 430, "y": 470 },
+      "hotspot": { "x": 625, "y": 418, "radius": 46, "label": "重载快换接口" },
+      "dimensions": { "width": 860, "height": 440 },
+      "compatibleBucketIds": ["bk-rock-18", "bk-quarry-22"],
+      "description": "面向矿山剥离、硬土破碎和高频装车场景的主力机型。",
+      "sellingPoints": ["高液压功率", "底盘稳定", "支持 2.2 m3 加强型挖斗"],
+      "notes": "建议优先选择 Rock 或 Quarry 系列挖斗提升耐磨寿命。"
+    },
+    {
+      "id": "ex-480-max",
+      "name": "MX480M 矿山挖掘机",
+      "series": "MineMax Series",
+      "tonnage": "48 t",
+      "image": "/assets/equipment/excavator-mx480.svg",
+      "anchor": { "x": 430, "y": 470 },
+      "hotspot": { "x": 640, "y": 405, "radius": 52, "label": "矿山级接口" },
+      "dimensions": { "width": 900, "height": 460 },
+      "compatibleBucketIds": ["bk-quarry-22", "bk-mine-30"],
+      "description": "面向高磨耗矿山装载的重型主机，强调结构强度和稳定性。",
+      "sellingPoints": ["大扭矩回转", "高强度动臂", "适配 3.0 m3 矿山斗"],
+      "notes": "矿山连续作业建议配套极限耐磨斗齿。"
+    }
+  ],
+  "buckets": [
+    {
+      "id": "bk-earth-14",
+      "name": "E14 土方标准斗",
+      "series": "Earth Series",
+      "capacity": "1.4 m3",
+      "image": "/assets/equipment/bucket-e14.svg",
+      "anchor": { "x": 805, "y": 488 },
+      "hotspot": { "x": 948, "y": 542, "radius": 34, "label": "斗齿安装位" },
+      "dimensions": { "width": 330, "height": 220 },
+      "compatibleExcavatorIds": ["ex-260"],
+      "compatibleToothIds": ["tooth-gp-s", "tooth-hd-x"],
+      "mountOffset": { "x": 0, "y": 0 },
+      "description": "低阻切削口和轻量化背板，适合普通土方、砂石回填。",
+      "sellingPoints": ["切入阻力低", "装载效率高", "维护成本可控"],
+      "notes": "不建议用于高强度花岗岩或长时间冲击工况。"
+    },
+    {
+      "id": "bk-rock-18",
+      "name": "R18 岩石加强斗",
+      "series": "Rock Series",
+      "capacity": "1.8 m3",
+      "image": "/assets/equipment/bucket-r18.svg",
+      "anchor": { "x": 810, "y": 486 },
+      "hotspot": { "x": 968, "y": 546, "radius": 36, "label": "加强齿座" },
+      "dimensions": { "width": 360, "height": 235 },
+      "compatibleExcavatorIds": ["ex-260", "ex-360-pro"],
+      "compatibleToothIds": ["tooth-hd-x", "tooth-penetrator"],
+      "mountOffset": { "x": 0, "y": 0 },
+      "description": "加厚侧刃和底部耐磨板，覆盖硬土、碎石和轻矿山工况。",
+      "sellingPoints": ["结构加强", "耐磨板覆盖率高", "齿座通用性强"],
+      "notes": "B 端演示默认组合，展示平衡型装配效果。"
+    },
+    {
+      "id": "bk-quarry-22",
+      "name": "Q22 采石场重载斗",
+      "series": "Quarry Series",
+      "capacity": "2.2 m3",
+      "image": "/assets/equipment/bucket-q22.svg",
+      "anchor": { "x": 812, "y": 482 },
+      "hotspot": { "x": 986, "y": 548, "radius": 38, "label": "重载齿座" },
+      "dimensions": { "width": 390, "height": 252 },
+      "compatibleExcavatorIds": ["ex-360-pro", "ex-480-max"],
+      "compatibleToothIds": ["tooth-hd-x", "tooth-penetrator", "tooth-abrasion"],
+      "mountOffset": { "x": 0, "y": 0 },
+      "description": "采石场和高磨耗环境专用结构，强化背板和斗耳。",
+      "sellingPoints": ["抗冲击结构", "高磨耗寿命", "大容量装载"],
+      "notes": "建议与穿透型或耐磨型斗齿配合。"
+    },
+    {
+      "id": "bk-mine-30",
+      "name": "M30 矿山极限斗",
+      "series": "MineMax Series",
+      "capacity": "3.0 m3",
+      "image": "/assets/equipment/bucket-m30.svg",
+      "anchor": { "x": 818, "y": 476 },
+      "hotspot": { "x": 1008, "y": 552, "radius": 42, "label": "矿山齿座" },
+      "dimensions": { "width": 420, "height": 268 },
+      "compatibleExcavatorIds": ["ex-480-max"],
+      "compatibleToothIds": ["tooth-penetrator", "tooth-abrasion"],
+      "mountOffset": { "x": 0, "y": 0 },
+      "description": "为重载矿山高产能装车设计，强调容量、厚板和寿命。",
+      "sellingPoints": ["极限耐磨", "大容量", "适合连续矿山班次"],
+      "notes": "需要匹配 48t 级以上主机液压输出。"
+    }
+  ],
+  "teeth": [
+    {
+      "id": "tooth-gp-s",
+      "name": "GP-S 通用斗齿",
+      "series": "General Purpose",
+      "material": "低合金耐磨钢",
+      "image": "/assets/equipment/tooth-gp-s.svg",
+      "anchor": { "x": 1002, "y": 552 },
+      "hotspot": { "x": 1022, "y": 555, "radius": 20, "label": "标准齿尖" },
+      "dimensions": { "width": 118, "height": 72 },
+      "compatibleBucketIds": ["bk-earth-14"],
+      "mountOffset": { "x": 0, "y": 0 },
+      "description": "通用土方齿型，适合低磨耗物料和日常装载。",
+      "sellingPoints": ["采购成本低", "换装速度快", "通用库存友好"],
+      "notes": "适合演示轻载场景。"
+    },
+    {
+      "id": "tooth-hd-x",
+      "name": "HD-X 加强斗齿",
+      "series": "Heavy Duty",
+      "material": "高韧性耐磨合金",
+      "image": "/assets/equipment/tooth-hd-x.svg",
+      "anchor": { "x": 1012, "y": 552 },
+      "hotspot": { "x": 1035, "y": 555, "radius": 22, "label": "加强齿尖" },
+      "dimensions": { "width": 132, "height": 78 },
+      "compatibleBucketIds": ["bk-earth-14", "bk-rock-18", "bk-quarry-22"],
+      "mountOffset": { "x": 0, "y": 0 },
+      "description": "平衡穿透力和耐磨寿命的主推齿型。",
+      "sellingPoints": ["耐冲击", "寿命稳定", "适配覆盖广"],
+      "notes": "默认推荐，用于大多数 B 端展示组合。"
+    },
+    {
+      "id": "tooth-penetrator",
+      "name": "PT-R 穿透型斗齿",
+      "series": "Penetrator",
+      "material": "高强度贝氏体钢",
+      "image": "/assets/equipment/tooth-penetrator.svg",
+      "anchor": { "x": 1020, "y": 552 },
+      "hotspot": { "x": 1048, "y": 554, "radius": 22, "label": "穿透齿尖" },
+      "dimensions": { "width": 150, "height": 76 },
+      "compatibleBucketIds": ["bk-rock-18", "bk-quarry-22", "bk-mine-30"],
+      "mountOffset": { "x": 0, "y": 0 },
+      "description": "狭长齿尖提升切入力，适合硬土、冻土和碎石。",
+      "sellingPoints": ["穿透力强", "降低油耗", "硬料切削效率高"],
+      "notes": "适合强调效率提升的客户演示。"
+    },
+    {
+      "id": "tooth-abrasion",
+      "name": "AB-M 极耐磨斗齿",
+      "series": "Abrasion Max",
+      "material": "高铬耐磨合金",
+      "image": "/assets/equipment/tooth-abrasion.svg",
+      "anchor": { "x": 1024, "y": 552 },
+      "hotspot": { "x": 1047, "y": 556, "radius": 24, "label": "耐磨齿尖" },
+      "dimensions": { "width": 148, "height": 86 },
+      "compatibleBucketIds": ["bk-quarry-22", "bk-mine-30"],
+      "mountOffset": { "x": 0, "y": 0 },
+      "description": "针对高磨耗矿料，齿身加厚并延长可磨耗体积。",
+      "sellingPoints": ["磨耗寿命长", "减少停机", "适合矿山班次"],
+      "notes": "高磨耗环境推荐方案。"
+    }
+  ],
+  "compatibility": [
+    {
+      "id": "fit-hx260-e14",
+      "excavatorId": "ex-260",
+      "bucketId": "bk-earth-14",
+      "toothIds": ["tooth-gp-s", "tooth-hd-x"],
+      "fitment": "26t 主机标准土方适配，建议用于低冲击装载。",
+      "remark": "轻载优先选择 GP-S，混合物料选择 HD-X。"
+    },
+    {
+      "id": "fit-hx260-r18",
+      "excavatorId": "ex-260",
+      "bucketId": "bk-rock-18",
+      "toothIds": ["tooth-hd-x", "tooth-penetrator"],
+      "fitment": "26t 主机上限加强配置，适合硬土和碎石。",
+      "remark": "连续高冲击作业需关注液压负载。"
+    },
+    {
+      "id": "fit-hx360-r18",
+      "excavatorId": "ex-360-pro",
+      "bucketId": "bk-rock-18",
+      "toothIds": ["tooth-hd-x", "tooth-penetrator"],
+      "fitment": "36t 主机通用重载配置，装车效率和寿命均衡。",
+      "remark": "推荐作为客户演示的默认组合。"
+    },
+    {
+      "id": "fit-hx360-q22",
+      "excavatorId": "ex-360-pro",
+      "bucketId": "bk-quarry-22",
+      "toothIds": ["tooth-hd-x", "tooth-penetrator", "tooth-abrasion"],
+      "fitment": "36t 主机采石场配置，适合中高磨耗工况。",
+      "remark": "高磨耗物料优先 AB-M。"
+    },
+    {
+      "id": "fit-mx480-q22",
+      "excavatorId": "ex-480-max",
+      "bucketId": "bk-quarry-22",
+      "toothIds": ["tooth-penetrator", "tooth-abrasion"],
+      "fitment": "48t 主机高产能采石场配置。",
+      "remark": "穿透型用于硬岩切入，耐磨型用于砂岩和矿料。"
+    },
+    {
+      "id": "fit-mx480-m30",
+      "excavatorId": "ex-480-max",
+      "bucketId": "bk-mine-30",
+      "toothIds": ["tooth-penetrator", "tooth-abrasion"],
+      "fitment": "48t 主机矿山极限配置，强调产能和寿命。",
+      "remark": "建议结合现场物料磨耗指数确认最终齿型。"
+    }
+  ]
+}

@@ -1,5 +1,48 @@
-# Vue 3 + TypeScript + Vite
+# Bucket Demo 2D
 
-This template should help get you started developing with Vue 3 and TypeScript in Vite. The template uses Vue 3 `<script setup>` SFCs, check out the [script setup docs](https://v3.vuejs.org/api/sfc-script-setup.html#sfc-script-setup) to learn more.
+Vue 3 + Vite + Pinia + Tailwind 的挖掘机斗齿 2D 装配展示 MVP。
 
-Learn more about the recommended Project Setup and IDE Support in the [Vue Docs TypeScript Guide](https://vuejs.org/guide/typescript/overview.html#project-setup).
+## Run
+
+```bash
+bun install
+bun run dev
+```
+
+## Structure
+
+```text
+src/
+  components/
+    ProductSelectorPanel.vue
+    PreviewStage.vue
+    CombinationSummary.vue
+    CompatibilityHint.vue
+    Toolbar.vue
+  data/
+    products.json
+  stores/
+    configurator.ts
+  types/
+    product.ts
+public/
+  assets/
+    equipment/
+      excavator-*.svg
+      bucket-*.svg
+      tooth-*.svg
+```
+
+## Data Model
+
+`src/data/products.json` contains:
+
+- `excavators`: host machine data with `compatibleBucketIds`.
+- `buckets`: bucket data with `compatibleExcavatorIds` and `compatibleToothIds`.
+- `teeth`: tooth data with `compatibleBucketIds`.
+- `compatibility`: explicit fitment rules for excavator + bucket + teeth.
+- `anchor` and `hotspot`: unified stage coordinates for accurate layer alignment and selection highlights.
+
+## Asset Replacement
+
+The demo uses SVG placeholders under `public/assets/equipment`. Replace those paths with transparent PNG or production SVG files in `products.json`; keep `dimensions`, `anchor`, and `hotspot` aligned to the 1280 x 720 stage.
