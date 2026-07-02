@@ -26,7 +26,17 @@ function exportPreview() {
     </div>
 
     <div class="flex flex-wrap items-center gap-2">
+      <button
+        type="button"
+        class="tool-button"
+        :class="store.showcaseView ? 'border-safety-500 bg-safety-100' : ''"
+        title="切换伪 3D 展台视角"
+        @click="store.toggleShowcaseView"
+      >
+        展台视角
+      </button>
       <button type="button" class="tool-button" title="重置视图" @click="store.resetView">复位视图</button>
+      <button type="button" class="tool-button" title="重置三层位置和大小" @click="store.resetAllLayerAdjustments">重置部件</button>
       <button type="button" class="tool-button" title="恢复默认组合" @click="store.restoreDefaultCombination">推荐组合</button>
       <button type="button" class="tool-button bg-iron-950 text-white hover:bg-iron-800" title="导出当前预览为 PNG" @click="exportPreview">导出 PNG</button>
     </div>

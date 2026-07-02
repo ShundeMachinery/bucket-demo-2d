@@ -7,6 +7,26 @@ const catalog = catalogJson as ProductCatalog
 
 export type HighlightPart = 'excavator' | 'bucket' | 'tooth'
 
+export type LayerAdjustment = {
+  offsetX: number
+  offsetY: number
+  scale: number
+  rotateX: number
+  rotateY: number
+}
+
+const defaultAdjustment: LayerAdjustment = {
+  offsetX: 0,
+  offsetY: 0,
+  scale: 1,
+  rotateX: 0,
+  rotateY: 0,
+}
+
+function cloneDefaultAdjustment() {
+  return { ...defaultAdjustment }
+}
+
 export const useConfiguratorStore = defineStore('configurator', () => {
   const selectedExcavatorId = ref(catalog.defaults.excavatorId)
   const selectedBucketId = ref(catalog.defaults.bucketId)
@@ -15,6 +35,12 @@ export const useConfiguratorStore = defineStore('configurator', () => {
   const scale = ref(0.9)
   const panX = ref(0)
   const panY = ref(0)
+  const showcaseView = ref(true)
+  const layerAdjustments = ref<Record<HighlightPart, LayerAdjustment>>({
+    excavator: cloneDefaultAdjustment(),
+    bucket: cloneDefaultAdjustment(),
+    tooth: cloneDefaultAdjustment(),
+  })
 
   const excavators = computed(() => catalog.excavators)
   const buckets = computed(() => catalog.buckets)
@@ -53,6 +79,8 @@ export const useConfiguratorStore = defineStore('configurator', () => {
     const current = compatibleTeeth.value.find((item) => item.id === selectedToothId.value)
     return current ?? compatibleTeeth.value[0] ?? catalog.teeth[0]
   })
+
+  const selectedLayerAdjustment = computed(() => layerAdjustments.value[highlightedPart.value])
 
   const combinationCode = computed(() => {
     return [
@@ -101,6 +129,46 @@ export const useConfiguratorStore = defineStore('configurator', () => {
     highlightedPart.value = part
   }
 
+  function updateLayerAdjustment(part: HighlightPart, patch: Partial<LayerAdjustment>) {
+    layerAdjustments.value[part] = {
+      ...layerAdjustments.value[part],
+      ...patch,
+    }
+  }
+
+  function moveLayer(part: HighlightPart, deltaX: number, deltaY: number) {
+    const adjustment = layerAdjustments.value[part]
+    updateLayerAdjustment(part, {
+      offsetX: Math.round(adjustment.offsetX + deltaX),
+      offsetY: Math.round(adjustment.offsetY + deltaY),
+    })
+  }
+
+  function setLayerScale(part: HighlightPart, nextScale: number) {
+    updateLayerAdjustment(part, {
+      scale: Math.min(1.6, Math.max(0.55, Number(nextScale.toFixed(2)))),
+    })
+  }
+
+  function setLayerTilt(part: HighlightPart, rotateX: number, rotateY: number) {
+    updateLayerAdjustment(part, {
+      rotateX: Math.min(18, Math.max(-18, Math.round(rotateX))),
+      rotateY: Math.min(24, Math.max(-24, Math.round(rotateY))),
+    })
+  }
+
+  function resetLayerAdjustment(part: HighlightPart) {
+    layerAdjustments.value[part] = cloneDefaultAdjustment()
+  }
+
+  function resetAllLayerAdjustments() {
+    layerAdjustments.value = {
+      excavator: cloneDefaultAdjustment(),
+      bucket: cloneDefaultAdjustment(),
+      tooth: cloneDefaultAdjustment(),
+    }
+  }
+
   function zoomIn() {
     scale.value = Math.min(1.8, Number((scale.value + 0.1).toFixed(2)))
   }
@@ -128,12 +196,17 @@ export const useConfiguratorStore = defineStore('configurator', () => {
     panY.value = 0
   }
 
+  function toggleShowcaseView() {
+    showcaseView.value = !showcaseView.value
+  }
+
   function restoreDefaultCombination() {
     selectedExcavatorId.value = catalog.defaults.excavatorId
     selectedBucketId.value = catalog.defaults.bucketId
     selectedToothId.value = catalog.defaults.toothId
     highlightedPart.value = 'tooth'
     resetView()
+    resetAllLayerAdjustments()
     ensureCompatibleSelection()
   }
 
@@ -151,9 +224,12 @@ export const useConfiguratorStore = defineStore('configurator', () => {
     scale,
     panX,
     panY,
+    showcaseView,
+    layerAdjustments,
     selectedExcavator,
     selectedBucket,
     selectedTooth,
+    selectedLayerAdjustment,
     compatibleBuckets,
     compatibleTeeth,
     combinationCode,
@@ -163,12 +239,19 @@ export const useConfiguratorStore = defineStore('configurator', () => {
     selectBucket,
     selectTooth,
     setHighlightedPart,
+    updateLayerAdjustment,
+    moveLayer,
+    setLayerScale,
+    setLayerTilt,
+    resetLayerAdjustment,
+    resetAllLayerAdjustments,
     zoomIn,
     zoomOut,
     setScale,
     setPan,
     nudgePan,
     resetView,
+    toggleShowcaseView,
     restoreDefaultCombination,
   }
 })

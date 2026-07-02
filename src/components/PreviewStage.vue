@@ -3,13 +3,22 @@ import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { toPng } from 'html-to-image'
 import { useConfiguratorStore, type HighlightPart } from '../stores/configurator'
 import type { ProductPart } from '../types/product'
+import type { CSSProperties } from 'vue'
 
 const store = useConfiguratorStore()
 const stageRef = ref<HTMLElement | null>(null)
 const viewportRef = ref<HTMLElement | null>(null)
-const isDragging = ref(false)
+const dragMode = ref<'none' | 'stage' | 'layer'>('none')
 const isExporting = ref(false)
-const dragStart = ref({ x: 0, y: 0, panX: 0, panY: 0 })
+const dragStart = ref({
+  x: 0,
+  y: 0,
+  panX: 0,
+  panY: 0,
+  layerOffsetX: 0,
+  layerOffsetY: 0,
+  part: 'excavator' as HighlightPart,
+})
 
 type Layer = {
   type: HighlightPart
@@ -28,40 +37,73 @@ const selectedLayer = computed(() => {
   return layers.value.find((layer) => layer.type === store.highlightedPart) ?? layers.value[0]
 })
 
-function layerStyle(layer: Layer) {
+function layerStyle(layer: Layer): CSSProperties {
+  const adjustment = store.layerAdjustments[layer.type]
   return {
-    left: `${layer.part.anchor.x}px`,
-    top: `${layer.part.anchor.y}px`,
+    left: `${layer.part.anchor.x + adjustment.offsetX}px`,
+    top: `${layer.part.anchor.y + adjustment.offsetY}px`,
     width: `${layer.part.dimensions.width}px`,
     height: `${layer.part.dimensions.height}px`,
     zIndex: layer.zIndex,
-    transform: 'translate(-50%, -50%)',
+    transform: `translate(-50%, -50%) perspective(1000px) rotateX(${adjustment.rotateX}deg) rotateY(${adjustment.rotateY}deg) scale(${adjustment.scale})`,
+    transformStyle: 'preserve-3d',
   }
 }
 
 function beginDrag(event: PointerEvent) {
   if ((event.target as HTMLElement).closest('[data-layer-control="true"]')) return
 
-  isDragging.value = true
+  dragMode.value = 'stage'
   dragStart.value = {
     x: event.clientX,
     y: event.clientY,
     panX: store.panX,
     panY: store.panY,
+    layerOffsetX: 0,
+    layerOffsetY: 0,
+    part: store.highlightedPart,
+  }
+  viewportRef.value?.setPointerCapture(event.pointerId)
+}
+
+function beginLayerDrag(event: PointerEvent, part: HighlightPart) {
+  event.stopPropagation()
+  store.setHighlightedPart(part)
+  const adjustment = store.layerAdjustments[part]
+
+  dragMode.value = 'layer'
+  dragStart.value = {
+    x: event.clientX,
+    y: event.clientY,
+    panX: store.panX,
+    panY: store.panY,
+    layerOffsetX: adjustment.offsetX,
+    layerOffsetY: adjustment.offsetY,
+    part,
   }
   viewportRef.value?.setPointerCapture(event.pointerId)
 }
 
 function moveDrag(event: PointerEvent) {
-  if (!isDragging.value) return
-  store.setPan(
-    dragStart.value.panX + event.clientX - dragStart.value.x,
-    dragStart.value.panY + event.clientY - dragStart.value.y,
-  )
+  if (dragMode.value === 'stage') {
+    store.setPan(
+      dragStart.value.panX + event.clientX - dragStart.value.x,
+      dragStart.value.panY + event.clientY - dragStart.value.y,
+    )
+  }
+
+  if (dragMode.value === 'layer') {
+    const deltaX = (event.clientX - dragStart.value.x) / store.scale
+    const deltaY = (event.clientY - dragStart.value.y) / store.scale
+    store.updateLayerAdjustment(dragStart.value.part, {
+      offsetX: Math.round(dragStart.value.layerOffsetX + deltaX),
+      offsetY: Math.round(dragStart.value.layerOffsetY + deltaY),
+    })
+  }
 }
 
 function endDrag(event: PointerEvent) {
-  isDragging.value = false
+  dragMode.value = 'none'
   viewportRef.value?.releasePointerCapture(event.pointerId)
 }
 
@@ -103,7 +145,7 @@ onUnmounted(() => {
   <div
     ref="viewportRef"
     class="relative flex flex-1 touch-none select-none overflow-hidden bg-[#f3f4f6]"
-    :class="isDragging ? 'cursor-grabbing' : 'cursor-grab'"
+    :class="dragMode !== 'none' ? 'cursor-grabbing' : 'cursor-grab'"
     @pointerdown="beginDrag"
     @pointermove="moveDrag"
     @pointerup="endDrag"
@@ -120,8 +162,9 @@ onUnmounted(() => {
       :style="{
         width: `${store.catalog.stage.width}px`,
         height: `${store.catalog.stage.height}px`,
-        transform: `translate(calc(-50% + ${store.panX}px), calc(-50% + ${store.panY}px)) scale(${store.scale})`,
+        transform: `translate(calc(-50% + ${store.panX}px), calc(-50% + ${store.panY}px)) scale(${store.scale}) ${store.showcaseView ? 'perspective(1400px) rotateX(2deg) rotateY(-7deg)' : ''}`,
         transformOrigin: 'center center',
+        transformStyle: 'preserve-3d',
       }"
     >
       <div class="absolute bottom-[112px] left-28 right-28 h-px bg-iron-700/25" />
@@ -135,6 +178,7 @@ onUnmounted(() => {
         :class="store.highlightedPart === layer.type ? 'drop-shadow-[0_18px_24px_rgba(17,19,23,0.28)]' : 'opacity-95'"
         :style="layerStyle(layer)"
         @click.stop="store.setHighlightedPart(layer.type)"
+        @pointerdown="beginLayerDrag($event, layer.type)"
       >
         <span
           class="absolute inset-0 transition duration-200"
@@ -163,8 +207,71 @@ onUnmounted(() => {
       </button>
     </div>
 
+    <div class="absolute right-5 top-5 w-[min(300px,calc(100%-2.5rem))] bg-iron-950/88 p-4 text-white shadow-xl backdrop-blur" data-layer-control="true">
+      <div class="flex items-start justify-between gap-3">
+        <div>
+          <p class="text-[11px] font-extrabold uppercase tracking-[0.16em] text-safety-500">Layer Adjust</p>
+          <p class="mt-1 text-base font-extrabold">{{ selectedLayer.label }}校准</p>
+        </div>
+        <button
+          type="button"
+          class="border border-white/15 px-2 py-1 text-xs font-extrabold text-white/75 transition hover:border-safety-500 hover:text-safety-500"
+          @click="store.resetLayerAdjustment(store.highlightedPart)"
+        >
+          重置
+        </button>
+      </div>
+
+      <div class="mt-4 space-y-4">
+        <label class="block">
+          <span class="flex items-center justify-between text-xs font-bold text-white/60">
+            <span>单层大小</span>
+            <span>{{ Math.round(store.selectedLayerAdjustment.scale * 100) }}%</span>
+          </span>
+          <input
+            class="mt-2 h-2 w-full accent-safety-500"
+            type="range"
+            min="55"
+            max="160"
+            :value="Math.round(store.selectedLayerAdjustment.scale * 100)"
+            @input="store.setLayerScale(store.highlightedPart, Number(($event.target as HTMLInputElement).value) / 100)"
+          />
+        </label>
+
+        <label class="block">
+          <span class="flex items-center justify-between text-xs font-bold text-white/60">
+            <span>左右透视</span>
+            <span>{{ store.selectedLayerAdjustment.rotateY }} deg</span>
+          </span>
+          <input
+            class="mt-2 h-2 w-full accent-safety-500"
+            type="range"
+            min="-24"
+            max="24"
+            :value="store.selectedLayerAdjustment.rotateY"
+            @input="store.setLayerTilt(store.highlightedPart, store.selectedLayerAdjustment.rotateX, Number(($event.target as HTMLInputElement).value))"
+          />
+        </label>
+
+        <label class="block">
+          <span class="flex items-center justify-between text-xs font-bold text-white/60">
+            <span>上下透视</span>
+            <span>{{ store.selectedLayerAdjustment.rotateX }} deg</span>
+          </span>
+          <input
+            class="mt-2 h-2 w-full accent-safety-500"
+            type="range"
+            min="-18"
+            max="18"
+            :value="store.selectedLayerAdjustment.rotateX"
+            @input="store.setLayerTilt(store.highlightedPart, Number(($event.target as HTMLInputElement).value), store.selectedLayerAdjustment.rotateY)"
+          />
+        </label>
+      </div>
+    </div>
+
     <div class="absolute bottom-5 right-5 hidden bg-iron-950/86 px-4 py-3 text-xs font-semibold text-white/80 backdrop-blur md:block">
-      拖动画面查看细节，滚轮缩放
+      拖动部件校准位置，拖动空白移动画面，滚轮缩放
     </div>
 
     <div
