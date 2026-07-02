@@ -1,9 +1,11 @@
 import { computed, ref, watch } from 'vue'
 import { defineStore } from 'pinia'
 import catalogJson from '../data/products.json'
+import { cloneSerializable, createDataPackage, getActiveDataPackage, saveActiveDataPackage } from '../services/dataPackageDb'
+import type { DataPackage } from '../types/dataPackage'
 import type { Bucket, Excavator, ProductCatalog, Tooth } from '../types/product'
 
-const catalog = catalogJson as ProductCatalog
+const defaultCatalog = catalogJson as ProductCatalog
 const storageKey = 'bucket-demo-2d:configurator:v2'
 const legacyStorageKey = 'bucket-demo-2d:configurator:v1'
 
@@ -70,6 +72,13 @@ type PersistedState = {
   perspective?: Partial<CombinationPerspective>
 }
 
+type SelectionState = Pick<PersistedState, 'selectedExcavatorId' | 'selectedBucketId' | 'selectedToothId'>
+
+type ApplyDataPackageOptions = {
+  selection?: SelectionState
+  layoutOverrides?: Record<string, Partial<CombinationLayout>>
+}
+
 function isHighlightPart(value: unknown): value is HighlightPart {
   return value === 'excavator' || value === 'bucket' || value === 'tooth'
 }
@@ -127,6 +136,12 @@ function normalizeLegacyLayout(
   }
 }
 
+function normalizeLayoutMap(layouts: Record<string, Partial<CombinationLayout>> | undefined) {
+  return layouts
+    ? Object.fromEntries(Object.entries(layouts).map(([key, value]) => [key, normalizeLayout(value)]))
+    : {}
+}
+
 function readPersistedState(): PersistedState | null {
   if (typeof window === 'undefined') return null
 
@@ -142,14 +157,24 @@ function createCombinationKey(excavatorId: string, bucketId: string, toothId: st
   return `${excavatorId}::${bucketId}::${toothId}`
 }
 
+function pickExistingId<T extends { id: string }>(items: T[], id: string | undefined, fallbackId: string) {
+  return id && items.some((item) => item.id === id) ? id : fallbackId
+}
+
 export const useConfiguratorStore = defineStore('configurator', () => {
+  let saveTimer: ReturnType<typeof window.setTimeout> | undefined
   const persisted = readPersistedState()
   const persistedExcavatorId = persisted?.selectedExcavatorId
   const persistedBucketId = persisted?.selectedBucketId
   const persistedToothId = persisted?.selectedToothId
-  const initialExcavatorId = catalog.excavators.some((item) => item.id === persistedExcavatorId) && persistedExcavatorId ? persistedExcavatorId : catalog.defaults.excavatorId
-  const initialBucketId = catalog.buckets.some((item) => item.id === persistedBucketId) && persistedBucketId ? persistedBucketId : catalog.defaults.bucketId
-  const initialToothId = catalog.teeth.some((item) => item.id === persistedToothId) && persistedToothId ? persistedToothId : catalog.defaults.toothId
+  const activeCatalog = ref<ProductCatalog>(cloneSerializable(defaultCatalog))
+  const dataPackageName = ref('mock-products')
+  const dataPackageUpdatedAt = ref('')
+  const isDataPackageLoading = ref(false)
+  const isDataPackageSaving = ref(false)
+  const initialExcavatorId = defaultCatalog.excavators.some((item) => item.id === persistedExcavatorId) && persistedExcavatorId ? persistedExcavatorId : defaultCatalog.defaults.excavatorId
+  const initialBucketId = defaultCatalog.buckets.some((item) => item.id === persistedBucketId) && persistedBucketId ? persistedBucketId : defaultCatalog.defaults.bucketId
+  const initialToothId = defaultCatalog.teeth.some((item) => item.id === persistedToothId) && persistedToothId ? persistedToothId : defaultCatalog.defaults.toothId
   const selectedExcavatorId = ref(initialExcavatorId)
   const selectedBucketId = ref(initialBucketId)
   const selectedToothId = ref(initialToothId)
@@ -163,33 +188,32 @@ export const useConfiguratorStore = defineStore('configurator', () => {
     ? normalizeLayout(persisted.combinationLayouts?.[initialCombinationKey] ?? persisted.currentLayout)
     : normalizeLegacyLayout(persisted?.layerAdjustments, persisted?.perspective)
   const combinationLayouts = ref<Record<string, CombinationLayout>>({
-    ...(persisted?.combinationLayouts
-      ? Object.fromEntries(Object.entries(persisted.combinationLayouts).map(([key, value]) => [key, normalizeLayout(value)]))
-      : {}),
+    ...normalizeLayoutMap(persisted?.combinationLayouts),
     [initialCombinationKey]: initialLayout,
   })
 
-  const excavators = computed(() => catalog.excavators)
-  const buckets = computed(() => catalog.buckets)
-  const teeth = computed(() => catalog.teeth)
+  const catalog = computed(() => activeCatalog.value)
+  const excavators = computed(() => activeCatalog.value.excavators)
+  const buckets = computed(() => activeCatalog.value.buckets)
+  const teeth = computed(() => activeCatalog.value.teeth)
 
   const selectedExcavator = computed<Excavator>(() => {
-    return catalog.excavators.find((item) => item.id === selectedExcavatorId.value) ?? catalog.excavators[0]
+    return activeCatalog.value.excavators.find((item) => item.id === selectedExcavatorId.value) ?? activeCatalog.value.excavators[0]
   })
 
   const compatibleBuckets = computed<Bucket[]>(() => {
-    return catalog.buckets.filter((bucket) => {
+    return activeCatalog.value.buckets.filter((bucket) => {
       return selectedExcavator.value.compatibleBucketIds.includes(bucket.id)
     })
   })
 
   const selectedBucket = computed<Bucket>(() => {
     const current = compatibleBuckets.value.find((item) => item.id === selectedBucketId.value)
-    return current ?? compatibleBuckets.value[0] ?? catalog.buckets[0]
+    return current ?? compatibleBuckets.value[0] ?? activeCatalog.value.buckets[0]
   })
 
   const compatibilityRule = computed(() => {
-    return catalog.compatibility.find((rule) => {
+    return activeCatalog.value.compatibility.find((rule) => {
       return rule.excavatorId === selectedExcavator.value.id && rule.bucketId === selectedBucket.value.id
     })
   })
@@ -197,14 +221,14 @@ export const useConfiguratorStore = defineStore('configurator', () => {
   const compatibleTeeth = computed<Tooth[]>(() => {
     const ruleToothIds = compatibilityRule.value?.toothIds ?? selectedBucket.value.compatibleToothIds
 
-    return catalog.teeth.filter((tooth) => {
+    return activeCatalog.value.teeth.filter((tooth) => {
       return ruleToothIds.includes(tooth.id) && tooth.compatibleBucketIds.includes(selectedBucket.value.id)
     })
   })
 
   const selectedTooth = computed<Tooth>(() => {
     const current = compatibleTeeth.value.find((item) => item.id === selectedToothId.value)
-    return current ?? compatibleTeeth.value[0] ?? catalog.teeth[0]
+    return current ?? compatibleTeeth.value[0] ?? activeCatalog.value.teeth[0]
   })
 
   const combinationKey = computed(() => createCombinationKey(selectedExcavator.value.id, selectedBucket.value.id, selectedTooth.value.id))
@@ -237,11 +261,11 @@ export const useConfiguratorStore = defineStore('configurator', () => {
 
   function ensureCompatibleSelection() {
     if (!compatibleBuckets.value.some((bucket) => bucket.id === selectedBucketId.value)) {
-      selectedBucketId.value = compatibleBuckets.value[0]?.id ?? catalog.buckets[0].id
+      selectedBucketId.value = compatibleBuckets.value[0]?.id ?? activeCatalog.value.buckets[0].id
     }
 
     if (!compatibleTeeth.value.some((tooth) => tooth.id === selectedToothId.value)) {
-      selectedToothId.value = compatibleTeeth.value[0]?.id ?? catalog.teeth[0].id
+      selectedToothId.value = compatibleTeeth.value[0]?.id ?? activeCatalog.value.teeth[0].id
     }
   }
 
@@ -379,16 +403,96 @@ export const useConfiguratorStore = defineStore('configurator', () => {
   }
 
   function restoreDefaultCombination() {
-    selectedExcavatorId.value = catalog.defaults.excavatorId
-    selectedBucketId.value = catalog.defaults.bucketId
-    selectedToothId.value = catalog.defaults.toothId
+    selectedExcavatorId.value = activeCatalog.value.defaults.excavatorId
+    selectedBucketId.value = activeCatalog.value.defaults.bucketId
+    selectedToothId.value = activeCatalog.value.defaults.toothId
     highlightedPart.value = 'tooth'
     resetView()
     ensureCompatibleSelection()
   }
 
+  function applySelectionState(selection: SelectionState | undefined) {
+    const defaults = activeCatalog.value.defaults
+
+    selectedExcavatorId.value = pickExistingId(activeCatalog.value.excavators, selection?.selectedExcavatorId, defaults.excavatorId)
+    selectedBucketId.value = pickExistingId(activeCatalog.value.buckets, selection?.selectedBucketId, defaults.bucketId)
+    selectedToothId.value = pickExistingId(activeCatalog.value.teeth, selection?.selectedToothId, defaults.toothId)
+
+    ensureCompatibleSelection()
+  }
+
+  function applyDataPackage(dataPackage: DataPackage, options: ApplyDataPackageOptions = {}) {
+    activeCatalog.value = cloneSerializable(dataPackage.catalog)
+    combinationLayouts.value = {
+      ...normalizeLayoutMap(dataPackage.layouts),
+      ...normalizeLayoutMap(options.layoutOverrides),
+    }
+    dataPackageName.value = dataPackage.name
+    dataPackageUpdatedAt.value = dataPackage.updatedAt
+    if (options.selection) {
+      applySelectionState(options.selection)
+    } else {
+      restoreDefaultCombination()
+    }
+    ensureCurrentLayout()
+  }
+
+  async function loadActiveDataPackage() {
+    isDataPackageLoading.value = true
+    try {
+      const saved = await getActiveDataPackage()
+      if (saved) {
+        applyDataPackage(saved, {
+          selection: {
+            selectedExcavatorId: persisted?.selectedExcavatorId,
+            selectedBucketId: persisted?.selectedBucketId,
+            selectedToothId: persisted?.selectedToothId,
+          },
+          layoutOverrides: persisted?.combinationLayouts,
+        })
+      }
+    } finally {
+      isDataPackageLoading.value = false
+    }
+  }
+
+  async function persistActiveDataPackage() {
+    isDataPackageSaving.value = true
+    try {
+      const nextPackage = createDataPackage(dataPackageName.value || 'bucket-demo-data', activeCatalog.value, combinationLayouts.value)
+      dataPackageUpdatedAt.value = nextPackage.updatedAt
+      await saveActiveDataPackage(nextPackage)
+    } finally {
+      isDataPackageSaving.value = false
+    }
+  }
+
+  function schedulePersistActiveDataPackage() {
+    if (typeof window === 'undefined') return
+
+    window.clearTimeout(saveTimer)
+    saveTimer = window.setTimeout(() => {
+      void persistActiveDataPackage()
+    }, 250)
+  }
+
+  async function importDataPackage(dataPackage: DataPackage) {
+    applyDataPackage(dataPackage)
+    await persistActiveDataPackage()
+  }
+
+  async function resetToMockDataPackage() {
+    applyDataPackage(createDataPackage('mock-products', cloneSerializable(defaultCatalog), {}))
+    await persistActiveDataPackage()
+  }
+
+  function getCurrentDataPackage() {
+    return createDataPackage(dataPackageName.value || 'bucket-demo-data', activeCatalog.value, combinationLayouts.value)
+  }
+
   ensureCompatibleSelection()
   ensureCurrentLayout()
+  void loadActiveDataPackage()
 
   watch(
     [
@@ -401,6 +505,7 @@ export const useConfiguratorStore = defineStore('configurator', () => {
       panY,
       showcaseView,
       combinationLayouts,
+      activeCatalog,
     ],
     () => {
       if (typeof window === 'undefined') return
@@ -419,12 +524,17 @@ export const useConfiguratorStore = defineStore('configurator', () => {
       }
 
       window.localStorage.setItem(storageKey, JSON.stringify(nextState))
+      schedulePersistActiveDataPackage()
     },
     { deep: true },
   )
 
   return {
     catalog,
+    dataPackageName,
+    dataPackageUpdatedAt,
+    isDataPackageLoading,
+    isDataPackageSaving,
     excavators,
     buckets,
     teeth,
@@ -475,5 +585,8 @@ export const useConfiguratorStore = defineStore('configurator', () => {
     resetView,
     toggleShowcaseView,
     restoreDefaultCombination,
+    importDataPackage,
+    resetToMockDataPackage,
+    getCurrentDataPackage,
   }
 })
