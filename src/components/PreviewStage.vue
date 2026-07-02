@@ -8,7 +8,7 @@ import type { CSSProperties } from 'vue'
 const store = useConfiguratorStore()
 const stageRef = ref<HTMLElement | null>(null)
 const viewportRef = ref<HTMLElement | null>(null)
-const dragMode = ref<'none' | 'stage' | 'layer'>('none')
+const dragMode = ref<'none' | 'stage' | 'layer' | 'scale' | 'rotate' | 'tilt-x' | 'tilt-y'>('none')
 const isExporting = ref(false)
 const isAdjustPanelOpen = ref(false)
 const isFullscreen = ref(false)
@@ -19,6 +19,10 @@ const dragStart = ref({
   panY: 0,
   layerOffsetX: 0,
   layerOffsetY: 0,
+  layerScale: 1,
+  rotateX: 0,
+  rotateY: 0,
+  rotateZ: 0,
   part: 'excavator' as HighlightPart,
 })
 
@@ -39,6 +43,14 @@ const selectedLayer = computed(() => {
   return layers.value.find((layer) => layer.type === store.highlightedPart) ?? layers.value[0]
 })
 
+const selectedFrameStyle = computed<CSSProperties>(() => {
+  return {
+    ...layerStyle(selectedLayer.value),
+    zIndex: 80,
+    pointerEvents: 'none',
+  }
+})
+
 function layerStyle(layer: Layer): CSSProperties {
   const adjustment = store.layerAdjustments[layer.type]
 
@@ -48,7 +60,7 @@ function layerStyle(layer: Layer): CSSProperties {
     width: `${layer.part.dimensions.width}px`,
     height: `${layer.part.dimensions.height}px`,
     zIndex: layer.zIndex,
-    transform: `translate(-50%, -50%) perspective(1000px) rotateX(${adjustment.rotateX}deg) rotateY(${adjustment.rotateY}deg) scale(${adjustment.scale})`,
+    transform: `translate(-50%, -50%) perspective(1000px) rotateX(${adjustment.rotateX}deg) rotateY(${adjustment.rotateY}deg) rotateZ(${adjustment.rotateZ}deg) scale(${adjustment.scale})`,
     transformStyle: 'preserve-3d',
   }
 }
@@ -64,6 +76,10 @@ function beginDrag(event: PointerEvent) {
     panY: store.panY,
     layerOffsetX: 0,
     layerOffsetY: 0,
+    layerScale: 1,
+    rotateX: 0,
+    rotateY: 0,
+    rotateZ: 0,
     part: store.highlightedPart,
   }
   viewportRef.value?.setPointerCapture(event.pointerId)
@@ -82,7 +98,32 @@ function beginLayerDrag(event: PointerEvent, part: HighlightPart) {
     panY: store.panY,
     layerOffsetX: adjustment.offsetX,
     layerOffsetY: adjustment.offsetY,
+    layerScale: adjustment.scale,
+    rotateX: adjustment.rotateX,
+    rotateY: adjustment.rotateY,
+    rotateZ: adjustment.rotateZ,
     part,
+  }
+  viewportRef.value?.setPointerCapture(event.pointerId)
+}
+
+function beginTransformDrag(event: PointerEvent, mode: 'scale' | 'rotate' | 'tilt-x' | 'tilt-y') {
+  event.stopPropagation()
+  const adjustment = store.selectedLayerAdjustment
+
+  dragMode.value = mode
+  dragStart.value = {
+    x: event.clientX,
+    y: event.clientY,
+    panX: store.panX,
+    panY: store.panY,
+    layerOffsetX: adjustment.offsetX,
+    layerOffsetY: adjustment.offsetY,
+    layerScale: adjustment.scale,
+    rotateX: adjustment.rotateX,
+    rotateY: adjustment.rotateY,
+    rotateZ: adjustment.rotateZ,
+    part: store.highlightedPart,
   }
   viewportRef.value?.setPointerCapture(event.pointerId)
 }
@@ -102,6 +143,26 @@ function moveDrag(event: PointerEvent) {
       offsetX: Math.round(dragStart.value.layerOffsetX + deltaX),
       offsetY: Math.round(dragStart.value.layerOffsetY + deltaY),
     })
+  }
+
+  if (dragMode.value === 'scale') {
+    const delta = ((event.clientX - dragStart.value.x) + (event.clientY - dragStart.value.y)) / 260
+    store.setLayerScale(dragStart.value.part, dragStart.value.layerScale + delta)
+  }
+
+  if (dragMode.value === 'rotate') {
+    const delta = (event.clientX - dragStart.value.x) / 2
+    store.setLayerRotation(dragStart.value.part, dragStart.value.rotateZ + delta)
+  }
+
+  if (dragMode.value === 'tilt-y') {
+    const delta = (event.clientX - dragStart.value.x) / 5
+    store.setLayerTilt(dragStart.value.part, dragStart.value.rotateX, dragStart.value.rotateY + delta)
+  }
+
+  if (dragMode.value === 'tilt-x') {
+    const delta = (event.clientY - dragStart.value.y) / -5
+    store.setLayerTilt(dragStart.value.part, dragStart.value.rotateX + delta, dragStart.value.rotateY)
   }
 }
 
@@ -206,6 +267,57 @@ onUnmounted(() => {
         />
         <img :src="layer.part.image" :alt="layer.part.name" class="h-full w-full object-contain" draggable="false" />
       </button>
+
+      <div class="absolute" data-layer-control="true" :style="selectedFrameStyle">
+        <div class="absolute inset-0 border-2 border-safety-500/95 bg-safety-500/5 shadow-[0_0_0_1px_rgba(17,19,23,0.16)]" />
+        <button
+          type="button"
+          class="pointer-events-auto absolute -left-3 -top-3 h-6 w-6 cursor-nwse-resize border-2 border-iron-950 bg-safety-500 shadow-lg"
+          title="拖拽缩放"
+          @pointerdown="beginTransformDrag($event, 'scale')"
+        />
+        <button
+          type="button"
+          class="pointer-events-auto absolute -right-3 -top-3 h-6 w-6 cursor-nesw-resize border-2 border-iron-950 bg-safety-500 shadow-lg"
+          title="拖拽缩放"
+          @pointerdown="beginTransformDrag($event, 'scale')"
+        />
+        <button
+          type="button"
+          class="pointer-events-auto absolute -bottom-3 -left-3 h-6 w-6 cursor-nesw-resize border-2 border-iron-950 bg-safety-500 shadow-lg"
+          title="拖拽缩放"
+          @pointerdown="beginTransformDrag($event, 'scale')"
+        />
+        <button
+          type="button"
+          class="pointer-events-auto absolute -bottom-3 -right-3 h-6 w-6 cursor-nwse-resize border-2 border-iron-950 bg-safety-500 shadow-lg"
+          title="拖拽缩放"
+          @pointerdown="beginTransformDrag($event, 'scale')"
+        />
+        <button
+          type="button"
+          class="pointer-events-auto absolute -top-16 left-1/2 h-7 w-7 -translate-x-1/2 cursor-grab rounded-full border-2 border-iron-950 bg-white shadow-lg"
+          title="拖拽旋转"
+          @pointerdown="beginTransformDrag($event, 'rotate')"
+        />
+        <span class="absolute -top-10 left-1/2 h-10 w-px -translate-x-1/2 bg-safety-500/90" />
+        <button
+          type="button"
+          class="pointer-events-auto absolute -right-4 top-1/2 h-10 w-8 -translate-y-1/2 cursor-ew-resize border-2 border-iron-950 bg-white text-[10px] font-extrabold text-iron-950 shadow-lg"
+          title="拖拽左右透视"
+          @pointerdown="beginTransformDrag($event, 'tilt-y')"
+        >
+          Y
+        </button>
+        <button
+          type="button"
+          class="pointer-events-auto absolute bottom-[-18px] left-1/2 h-8 w-10 -translate-x-1/2 cursor-ns-resize border-2 border-iron-950 bg-white text-[10px] font-extrabold text-iron-950 shadow-lg"
+          title="拖拽上下透视"
+          @pointerdown="beginTransformDrag($event, 'tilt-x')"
+        >
+          X
+        </button>
+      </div>
     </div>
 
     <div class="absolute left-5 top-5 w-[min(420px,calc(100%-2.5rem))] border-l-4 border-safety-500 bg-white/86 px-4 py-3 shadow-lg backdrop-blur">
@@ -261,98 +373,25 @@ onUnmounted(() => {
         </div>
 
         <div class="border-b border-white/10 pb-4">
-          <p class="text-xs font-extrabold text-white/80">组合整体透视</p>
-          <label class="mt-3 block">
-            <span class="flex items-center justify-between text-xs font-bold text-white/60">
-              <span>整体上下</span>
-              <span>{{ store.combinationPerspective.rotateX }} deg</span>
-            </span>
-            <div class="mt-2 flex items-center gap-2">
-              <input
-                class="h-2 flex-1 accent-safety-500"
-                type="range"
-                min="-18"
-                max="18"
-                :value="store.combinationPerspective.rotateX"
-                @input="store.setCombinationPerspective(Number(($event.target as HTMLInputElement).value), store.combinationPerspective.rotateY)"
-              />
-              <button type="button" class="border border-white/15 px-2 py-1 text-[11px] font-extrabold text-white/70 hover:border-safety-500" @click="store.resetCombinationPerspectiveX">Reset</button>
-            </div>
-          </label>
-
-          <label class="mt-3 block">
-            <span class="flex items-center justify-between text-xs font-bold text-white/60">
-              <span>整体左右</span>
-              <span>{{ store.combinationPerspective.rotateY }} deg</span>
-            </span>
-            <div class="mt-2 flex items-center gap-2">
-              <input
-                class="h-2 flex-1 accent-safety-500"
-                type="range"
-                min="-24"
-                max="24"
-                :value="store.combinationPerspective.rotateY"
-                @input="store.setCombinationPerspective(store.combinationPerspective.rotateX, Number(($event.target as HTMLInputElement).value))"
-              />
-              <button type="button" class="border border-white/15 px-2 py-1 text-[11px] font-extrabold text-white/70 hover:border-safety-500" @click="store.resetCombinationPerspectiveY">Reset</button>
-            </div>
-          </label>
+          <p class="text-xs font-extrabold text-white/80">画布控制点</p>
+          <div class="mt-3 space-y-2 text-xs font-semibold leading-5 text-white/62">
+            <p>拖动选中部件：移动位置。</p>
+            <p>拖动四个黄色角点：缩放大小。</p>
+            <p>拖动顶部白色圆点：平面旋转。</p>
+            <p>拖动右侧 Y / 底部 X 控制点：调整左右和上下透视。</p>
+          </div>
         </div>
 
-        <p class="text-xs font-extrabold text-white/80">单个部件校准</p>
-        <label class="block">
-          <span class="flex items-center justify-between text-xs font-bold text-white/60">
-            <span>单层大小</span>
-            <span>{{ Math.round(store.selectedLayerAdjustment.scale * 100) }}%</span>
-          </span>
-          <div class="mt-2 flex items-center gap-2">
-            <input
-              class="h-2 flex-1 accent-safety-500"
-              type="range"
-              min="55"
-              max="160"
-              :value="Math.round(store.selectedLayerAdjustment.scale * 100)"
-              @input="store.setLayerScale(store.highlightedPart, Number(($event.target as HTMLInputElement).value) / 100)"
-            />
-            <button type="button" class="border border-white/15 px-2 py-1 text-[11px] font-extrabold text-white/70 hover:border-safety-500" @click="store.resetLayerScale(store.highlightedPart)">Reset</button>
-          </div>
-        </label>
+        <div class="grid grid-cols-2 gap-2 text-xs">
+          <button type="button" class="border border-white/15 px-2 py-2 font-extrabold text-white/75 transition hover:border-safety-500 hover:text-safety-500" @click="store.resetLayerScale(store.highlightedPart)">重置大小</button>
+          <button type="button" class="border border-white/15 px-2 py-2 font-extrabold text-white/75 transition hover:border-safety-500 hover:text-safety-500" @click="store.resetLayerRotation(store.highlightedPart)">重置旋转</button>
+          <button type="button" class="border border-white/15 px-2 py-2 font-extrabold text-white/75 transition hover:border-safety-500 hover:text-safety-500" @click="store.resetLayerTiltX(store.highlightedPart)">重置上下透视</button>
+          <button type="button" class="border border-white/15 px-2 py-2 font-extrabold text-white/75 transition hover:border-safety-500 hover:text-safety-500" @click="store.resetLayerTiltY(store.highlightedPart)">重置左右透视</button>
+        </div>
 
-        <label class="block">
-          <span class="flex items-center justify-between text-xs font-bold text-white/60">
-            <span>左右透视</span>
-            <span>{{ store.selectedLayerAdjustment.rotateY }} deg</span>
-          </span>
-          <div class="mt-2 flex items-center gap-2">
-            <input
-              class="h-2 flex-1 accent-safety-500"
-              type="range"
-              min="-24"
-              max="24"
-              :value="store.selectedLayerAdjustment.rotateY"
-              @input="store.setLayerTilt(store.highlightedPart, store.selectedLayerAdjustment.rotateX, Number(($event.target as HTMLInputElement).value))"
-            />
-            <button type="button" class="border border-white/15 px-2 py-1 text-[11px] font-extrabold text-white/70 hover:border-safety-500" @click="store.resetLayerTiltY(store.highlightedPart)">Reset</button>
-          </div>
-        </label>
-
-        <label class="block">
-          <span class="flex items-center justify-between text-xs font-bold text-white/60">
-            <span>上下透视</span>
-            <span>{{ store.selectedLayerAdjustment.rotateX }} deg</span>
-          </span>
-          <div class="mt-2 flex items-center gap-2">
-            <input
-              class="h-2 flex-1 accent-safety-500"
-              type="range"
-              min="-18"
-              max="18"
-              :value="store.selectedLayerAdjustment.rotateX"
-              @input="store.setLayerTilt(store.highlightedPart, Number(($event.target as HTMLInputElement).value), store.selectedLayerAdjustment.rotateY)"
-            />
-            <button type="button" class="border border-white/15 px-2 py-1 text-[11px] font-extrabold text-white/70 hover:border-safety-500" @click="store.resetLayerTiltX(store.highlightedPart)">Reset</button>
-          </div>
-        </label>
+        <div class="border-t border-white/10 pt-3 text-xs font-semibold leading-5 text-white/55">
+          当前：大小 {{ Math.round(store.selectedLayerAdjustment.scale * 100) }}%，旋转 {{ store.selectedLayerAdjustment.rotateZ }} deg，X {{ store.selectedLayerAdjustment.rotateX }} deg，Y {{ store.selectedLayerAdjustment.rotateY }} deg。
+        </div>
       </div>
     </div>
 
@@ -365,7 +404,7 @@ onUnmounted(() => {
         {{ isFullscreen ? '退出全屏' : '全屏展示' }}
       </button>
       <div class="hidden bg-iron-950/86 px-4 py-3 text-xs font-semibold text-white/80 backdrop-blur md:block">
-        拖动部件校准位置，拖动空白移动画面，滚轮缩放
+        拖动部件移动，拖角点缩放，拖白色圆点旋转，拖空白移动画面
       </div>
     </div>
 

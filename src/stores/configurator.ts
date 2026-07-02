@@ -15,6 +15,7 @@ export type LayerAdjustment = {
   offsetX: number
   offsetY: number
   scale: number
+  rotateZ: number
   rotateX: number
   rotateY: number
 }
@@ -33,6 +34,7 @@ const defaultAdjustment: LayerAdjustment = {
   offsetX: 0,
   offsetY: 0,
   scale: 1,
+  rotateZ: 0,
   rotateX: 0,
   rotateY: 0,
 }
@@ -92,6 +94,7 @@ function normalizeAdjustment(value: Partial<LayerAdjustment> | undefined): Layer
     offsetX: Math.round(clamp(value?.offsetX, -800, 800, 0)),
     offsetY: Math.round(clamp(value?.offsetY, -500, 500, 0)),
     scale: Number(clamp(value?.scale, 0.55, 1.6, 1).toFixed(2)),
+    rotateZ: Math.round(clamp(value?.rotateZ, -180, 180, 0)),
     rotateX: Math.round(clamp(value?.rotateX, -18, 18, 0)),
     rotateY: Math.round(clamp(value?.rotateY, -24, 24, 0)),
   }
@@ -159,6 +162,20 @@ function createCombinationKey(excavatorId: string, bucketId: string, toothId: st
 
 function pickExistingId<T extends { id: string }>(items: T[], id: string | undefined, fallbackId: string) {
   return id && items.some((item) => item.id === id) ? id : fallbackId
+}
+
+function addUnique(target: string[], id: string) {
+  if (!target.includes(id)) {
+    target.push(id)
+  }
+}
+
+function assertUniqueId(catalog: ProductCatalog, id: string) {
+  const exists = [...catalog.excavators, ...catalog.buckets, ...catalog.teeth].some((part) => part.id === id)
+
+  if (exists) {
+    throw new Error(`ID 已存在：${id}`)
+  }
 }
 
 export const useConfiguratorStore = defineStore('configurator', () => {
@@ -312,6 +329,12 @@ export const useConfiguratorStore = defineStore('configurator', () => {
     })
   }
 
+  function setLayerRotation(part: HighlightPart, rotateZ: number) {
+    updateLayerAdjustment(part, {
+      rotateZ: Math.min(180, Math.max(-180, Math.round(rotateZ))),
+    })
+  }
+
   function setLayerTilt(part: HighlightPart, rotateX: number, rotateY: number) {
     updateLayerAdjustment(part, {
       rotateX: Math.min(18, Math.max(-18, Math.round(rotateX))),
@@ -326,6 +349,10 @@ export const useConfiguratorStore = defineStore('configurator', () => {
 
   function resetLayerScale(part: HighlightPart) {
     updateLayerAdjustment(part, { scale: defaultAdjustment.scale })
+  }
+
+  function resetLayerRotation(part: HighlightPart) {
+    updateLayerAdjustment(part, { rotateZ: defaultAdjustment.rotateZ })
   }
 
   function resetLayerTiltX(part: HighlightPart) {
@@ -384,8 +411,10 @@ export const useConfiguratorStore = defineStore('configurator', () => {
   }
 
   function setPan(x: number, y: number) {
-    panX.value = Math.min(420, Math.max(-420, Math.round(x)))
-    panY.value = Math.min(260, Math.max(-260, Math.round(y)))
+    const maxX = Math.max(800, Math.round(activeCatalog.value.stage.width * scale.value))
+    const maxY = Math.max(620, Math.round(activeCatalog.value.stage.height * scale.value))
+    panX.value = Math.min(maxX, Math.max(-maxX, Math.round(x)))
+    panY.value = Math.min(maxY, Math.max(-maxY, Math.round(y)))
   }
 
   function nudgePan(deltaX: number, deltaY: number) {
@@ -490,6 +519,101 @@ export const useConfiguratorStore = defineStore('configurator', () => {
     return createDataPackage(dataPackageName.value || 'bucket-demo-data', activeCatalog.value, combinationLayouts.value)
   }
 
+  function upsertCompatibilityRule(excavatorId: string, bucketId: string, toothIds: string[]) {
+    const existingRule = activeCatalog.value.compatibility.find((rule) => {
+      return rule.excavatorId === excavatorId && rule.bucketId === bucketId
+    })
+    const nextToothIds = Array.from(new Set(toothIds))
+
+    if (existingRule) {
+      existingRule.toothIds = Array.from(new Set([...existingRule.toothIds, ...nextToothIds]))
+      return
+    }
+
+    activeCatalog.value.compatibility.push({
+      id: `fit-${excavatorId}-${bucketId}`,
+      excavatorId,
+      bucketId,
+      toothIds: nextToothIds,
+      fitment: '自定义数据录入生成的适配关系，请在真实交付前复核安装尺寸。',
+      remark: '由数据管理页新增产品时自动创建。',
+    })
+  }
+
+  function syncBucketRelations(bucket: Bucket) {
+    for (const excavatorId of bucket.compatibleExcavatorIds) {
+      const excavator = activeCatalog.value.excavators.find((item) => item.id === excavatorId)
+      if (excavator) {
+        addUnique(excavator.compatibleBucketIds, bucket.id)
+        upsertCompatibilityRule(excavator.id, bucket.id, bucket.compatibleToothIds)
+      }
+    }
+
+    for (const toothId of bucket.compatibleToothIds) {
+      const tooth = activeCatalog.value.teeth.find((item) => item.id === toothId)
+      if (tooth) {
+        addUnique(tooth.compatibleBucketIds, bucket.id)
+      }
+    }
+  }
+
+  function syncToothRelations(tooth: Tooth) {
+    for (const bucketId of tooth.compatibleBucketIds) {
+      const bucket = activeCatalog.value.buckets.find((item) => item.id === bucketId)
+      if (!bucket) continue
+
+      addUnique(bucket.compatibleToothIds, tooth.id)
+
+      for (const excavatorId of bucket.compatibleExcavatorIds) {
+        upsertCompatibilityRule(excavatorId, bucket.id, [tooth.id])
+      }
+    }
+  }
+
+  function syncExcavatorRelations(excavator: Excavator) {
+    for (const bucketId of excavator.compatibleBucketIds) {
+      const bucket = activeCatalog.value.buckets.find((item) => item.id === bucketId)
+      if (!bucket) continue
+
+      addUnique(bucket.compatibleExcavatorIds, excavator.id)
+      upsertCompatibilityRule(excavator.id, bucket.id, bucket.compatibleToothIds)
+    }
+  }
+
+  async function addExcavator(product: Excavator) {
+    assertUniqueId(activeCatalog.value, product.id)
+    activeCatalog.value.excavators.push(cloneSerializable(product))
+    syncExcavatorRelations(product)
+    selectedExcavatorId.value = product.id
+    highlightedPart.value = 'excavator'
+    ensureCompatibleSelection()
+    await persistActiveDataPackage()
+  }
+
+  async function addBucket(product: Bucket) {
+    assertUniqueId(activeCatalog.value, product.id)
+    activeCatalog.value.buckets.push(cloneSerializable(product))
+    syncBucketRelations(product)
+    selectedExcavatorId.value = product.compatibleExcavatorIds[0] ?? selectedExcavatorId.value
+    selectedBucketId.value = product.id
+    highlightedPart.value = 'bucket'
+    ensureCompatibleSelection()
+    await persistActiveDataPackage()
+  }
+
+  async function addTooth(product: Tooth) {
+    assertUniqueId(activeCatalog.value, product.id)
+    activeCatalog.value.teeth.push(cloneSerializable(product))
+    syncToothRelations(product)
+    const firstBucket = activeCatalog.value.buckets.find((bucket) => bucket.id === product.compatibleBucketIds[0])
+    selectedExcavatorId.value = firstBucket?.compatibleExcavatorIds[0] ?? selectedExcavatorId.value
+    selectedBucketId.value = firstBucket?.id ?? selectedBucketId.value
+    selectedToothId.value = product.id
+    highlightedPart.value = 'tooth'
+    ensureCompatibleSelection()
+    await persistActiveDataPackage()
+  }
+
   ensureCompatibleSelection()
   ensureCurrentLayout()
   void loadActiveDataPackage()
@@ -566,9 +690,11 @@ export const useConfiguratorStore = defineStore('configurator', () => {
     updateLayerAdjustment,
     moveLayer,
     setLayerScale,
+    setLayerRotation,
     setLayerTilt,
     resetLayerAdjustment,
     resetLayerScale,
+    resetLayerRotation,
     resetLayerTiltX,
     resetLayerTiltY,
     resetAllLayerAdjustments,
@@ -588,5 +714,8 @@ export const useConfiguratorStore = defineStore('configurator', () => {
     importDataPackage,
     resetToMockDataPackage,
     getCurrentDataPackage,
+    addExcavator,
+    addBucket,
+    addTooth,
   }
 })
