@@ -36,8 +36,8 @@ const defaultAdjustment: LayerAdjustment = {
 }
 
 const defaultPerspective: CombinationPerspective = {
-  rotateX: 2,
-  rotateY: -7,
+  rotateX: 0,
+  rotateY: 0,
 }
 
 function cloneDefaultAdjustment() {
@@ -89,9 +89,16 @@ function normalizeAdjustment(value: Partial<LayerAdjustment> | undefined): Layer
 }
 
 function normalizePerspective(value: Partial<CombinationPerspective> | undefined): CombinationPerspective {
+  const rotateX = Math.round(clamp(value?.rotateX, -18, 18, defaultPerspective.rotateX))
+  const rotateY = Math.round(clamp(value?.rotateY, -24, 24, defaultPerspective.rotateY))
+
+  if (rotateX === 2 && rotateY === -7) {
+    return { ...defaultPerspective }
+  }
+
   return {
-    rotateX: Math.round(clamp(value?.rotateX, -18, 18, defaultPerspective.rotateX)),
-    rotateY: Math.round(clamp(value?.rotateY, -24, 24, defaultPerspective.rotateY)),
+    rotateX,
+    rotateY,
   }
 }
 
@@ -293,6 +300,18 @@ export const useConfiguratorStore = defineStore('configurator', () => {
     layout.layerAdjustments[part] = cloneDefaultAdjustment()
   }
 
+  function resetLayerScale(part: HighlightPart) {
+    updateLayerAdjustment(part, { scale: defaultAdjustment.scale })
+  }
+
+  function resetLayerTiltX(part: HighlightPart) {
+    updateLayerAdjustment(part, { rotateX: defaultAdjustment.rotateX })
+  }
+
+  function resetLayerTiltY(part: HighlightPart) {
+    updateLayerAdjustment(part, { rotateY: defaultAdjustment.rotateY })
+  }
+
   function resetAllLayerAdjustments() {
     const layout = ensureCurrentLayout()
     layout.layerAdjustments = createDefaultLayout().layerAdjustments
@@ -314,6 +333,14 @@ export const useConfiguratorStore = defineStore('configurator', () => {
   function resetCombinationPerspective() {
     const layout = ensureCurrentLayout()
     layout.perspective = { ...defaultPerspective }
+  }
+
+  function resetCombinationPerspectiveX() {
+    setCombinationPerspective(defaultPerspective.rotateX, combinationPerspective.value.rotateY)
+  }
+
+  function resetCombinationPerspectiveY() {
+    setCombinationPerspective(combinationPerspective.value.rotateX, defaultPerspective.rotateY)
   }
 
   function resetCurrentCombinationLayout() {
@@ -431,9 +458,14 @@ export const useConfiguratorStore = defineStore('configurator', () => {
     setLayerScale,
     setLayerTilt,
     resetLayerAdjustment,
+    resetLayerScale,
+    resetLayerTiltX,
+    resetLayerTiltY,
     resetAllLayerAdjustments,
     setCombinationPerspective,
     resetCombinationPerspective,
+    resetCombinationPerspectiveX,
+    resetCombinationPerspectiveY,
     resetCurrentCombinationLayout,
     zoomIn,
     zoomOut,

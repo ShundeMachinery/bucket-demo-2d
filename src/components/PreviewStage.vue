@@ -10,6 +10,8 @@ const stageRef = ref<HTMLElement | null>(null)
 const viewportRef = ref<HTMLElement | null>(null)
 const dragMode = ref<'none' | 'stage' | 'layer'>('none')
 const isExporting = ref(false)
+const isAdjustPanelOpen = ref(false)
+const isFullscreen = ref(false)
 const dragStart = ref({
   x: 0,
   y: 0,
@@ -39,6 +41,7 @@ const selectedLayer = computed(() => {
 
 function layerStyle(layer: Layer): CSSProperties {
   const adjustment = store.layerAdjustments[layer.type]
+
   return {
     left: `${layer.part.anchor.x + adjustment.offsetX}px`,
     top: `${layer.part.anchor.y + adjustment.offsetY}px`,
@@ -69,8 +72,8 @@ function beginDrag(event: PointerEvent) {
 function beginLayerDrag(event: PointerEvent, part: HighlightPart) {
   event.stopPropagation()
   store.setHighlightedPart(part)
-  const adjustment = store.layerAdjustments[part]
 
+  const adjustment = store.layerAdjustments[part]
   dragMode.value = 'layer'
   dragStart.value = {
     x: event.clientX,
@@ -113,6 +116,21 @@ function handleWheel(event: WheelEvent) {
   store.setScale(store.scale + delta)
 }
 
+async function toggleFullscreen() {
+  if (!viewportRef.value) return
+
+  if (document.fullscreenElement) {
+    await document.exitFullscreen()
+    return
+  }
+
+  await viewportRef.value.requestFullscreen()
+}
+
+function syncFullscreenState() {
+  isFullscreen.value = document.fullscreenElement === viewportRef.value
+}
+
 async function exportStage() {
   if (!stageRef.value || isExporting.value) return
 
@@ -134,10 +152,12 @@ async function exportStage() {
 
 onMounted(() => {
   window.addEventListener('export-preview', exportStage)
+  document.addEventListener('fullscreenchange', syncFullscreenState)
 })
 
 onUnmounted(() => {
   window.removeEventListener('export-preview', exportStage)
+  document.removeEventListener('fullscreenchange', syncFullscreenState)
 })
 </script>
 
@@ -207,22 +227,39 @@ onUnmounted(() => {
       </button>
     </div>
 
-    <div class="absolute right-5 top-5 w-[min(300px,calc(100%-2.5rem))] bg-iron-950/88 p-4 text-white shadow-xl backdrop-blur" data-layer-control="true">
+    <div class="absolute right-5 top-5 w-[min(320px,calc(100%-2.5rem))] bg-iron-950/88 text-white shadow-xl backdrop-blur" data-layer-control="true">
       <div class="flex items-start justify-between gap-3">
-        <div>
+        <button type="button" class="flex-1 p-4 text-left" @click="isAdjustPanelOpen = !isAdjustPanelOpen">
           <p class="text-[11px] font-extrabold uppercase tracking-[0.16em] text-safety-500">Layout Adjust</p>
           <p class="mt-1 text-base font-extrabold">{{ selectedLayer.label }} / 当前组合</p>
-        </div>
+        </button>
         <button
           type="button"
-          class="border border-white/15 px-2 py-1 text-xs font-extrabold text-white/75 transition hover:border-safety-500 hover:text-safety-500"
-          @click="store.resetCurrentCombinationLayout"
+          class="m-4 border border-white/15 px-2 py-1 text-xs font-extrabold text-white/75 transition hover:border-safety-500 hover:text-safety-500"
+          @click="isAdjustPanelOpen = !isAdjustPanelOpen"
         >
-          重置组合
+          {{ isAdjustPanelOpen ? '收起' : '展开' }}
         </button>
       </div>
 
-      <div class="mt-4 space-y-4">
+      <div v-if="isAdjustPanelOpen" class="space-y-4 border-t border-white/10 p-4 pt-4">
+        <div class="flex gap-2">
+          <button
+            type="button"
+            class="flex-1 border border-white/15 px-2 py-2 text-xs font-extrabold text-white/75 transition hover:border-safety-500 hover:text-safety-500"
+            @click="store.resetCurrentCombinationLayout"
+          >
+            重置组合
+          </button>
+          <button
+            type="button"
+            class="flex-1 border border-white/15 px-2 py-2 text-xs font-extrabold text-white/75 transition hover:border-safety-500 hover:text-safety-500"
+            @click="store.resetLayerAdjustment(store.highlightedPart)"
+          >
+            重置单层
+          </button>
+        </div>
+
         <div class="border-b border-white/10 pb-4">
           <p class="text-xs font-extrabold text-white/80">组合整体透视</p>
           <label class="mt-3 block">
@@ -230,14 +267,17 @@ onUnmounted(() => {
               <span>整体上下</span>
               <span>{{ store.combinationPerspective.rotateX }} deg</span>
             </span>
-            <input
-              class="mt-2 h-2 w-full accent-safety-500"
-              type="range"
-              min="-18"
-              max="18"
-              :value="store.combinationPerspective.rotateX"
-              @input="store.setCombinationPerspective(Number(($event.target as HTMLInputElement).value), store.combinationPerspective.rotateY)"
-            />
+            <div class="mt-2 flex items-center gap-2">
+              <input
+                class="h-2 flex-1 accent-safety-500"
+                type="range"
+                min="-18"
+                max="18"
+                :value="store.combinationPerspective.rotateX"
+                @input="store.setCombinationPerspective(Number(($event.target as HTMLInputElement).value), store.combinationPerspective.rotateY)"
+              />
+              <button type="button" class="border border-white/15 px-2 py-1 text-[11px] font-extrabold text-white/70 hover:border-safety-500" @click="store.resetCombinationPerspectiveX">Reset</button>
+            </div>
           </label>
 
           <label class="mt-3 block">
@@ -245,14 +285,17 @@ onUnmounted(() => {
               <span>整体左右</span>
               <span>{{ store.combinationPerspective.rotateY }} deg</span>
             </span>
-            <input
-              class="mt-2 h-2 w-full accent-safety-500"
-              type="range"
-              min="-24"
-              max="24"
-              :value="store.combinationPerspective.rotateY"
-              @input="store.setCombinationPerspective(store.combinationPerspective.rotateX, Number(($event.target as HTMLInputElement).value))"
-            />
+            <div class="mt-2 flex items-center gap-2">
+              <input
+                class="h-2 flex-1 accent-safety-500"
+                type="range"
+                min="-24"
+                max="24"
+                :value="store.combinationPerspective.rotateY"
+                @input="store.setCombinationPerspective(store.combinationPerspective.rotateX, Number(($event.target as HTMLInputElement).value))"
+              />
+              <button type="button" class="border border-white/15 px-2 py-1 text-[11px] font-extrabold text-white/70 hover:border-safety-500" @click="store.resetCombinationPerspectiveY">Reset</button>
+            </div>
           </label>
         </div>
 
@@ -262,14 +305,17 @@ onUnmounted(() => {
             <span>单层大小</span>
             <span>{{ Math.round(store.selectedLayerAdjustment.scale * 100) }}%</span>
           </span>
-          <input
-            class="mt-2 h-2 w-full accent-safety-500"
-            type="range"
-            min="55"
-            max="160"
-            :value="Math.round(store.selectedLayerAdjustment.scale * 100)"
-            @input="store.setLayerScale(store.highlightedPart, Number(($event.target as HTMLInputElement).value) / 100)"
-          />
+          <div class="mt-2 flex items-center gap-2">
+            <input
+              class="h-2 flex-1 accent-safety-500"
+              type="range"
+              min="55"
+              max="160"
+              :value="Math.round(store.selectedLayerAdjustment.scale * 100)"
+              @input="store.setLayerScale(store.highlightedPart, Number(($event.target as HTMLInputElement).value) / 100)"
+            />
+            <button type="button" class="border border-white/15 px-2 py-1 text-[11px] font-extrabold text-white/70 hover:border-safety-500" @click="store.resetLayerScale(store.highlightedPart)">Reset</button>
+          </div>
         </label>
 
         <label class="block">
@@ -277,14 +323,17 @@ onUnmounted(() => {
             <span>左右透视</span>
             <span>{{ store.selectedLayerAdjustment.rotateY }} deg</span>
           </span>
-          <input
-            class="mt-2 h-2 w-full accent-safety-500"
-            type="range"
-            min="-24"
-            max="24"
-            :value="store.selectedLayerAdjustment.rotateY"
-            @input="store.setLayerTilt(store.highlightedPart, store.selectedLayerAdjustment.rotateX, Number(($event.target as HTMLInputElement).value))"
-          />
+          <div class="mt-2 flex items-center gap-2">
+            <input
+              class="h-2 flex-1 accent-safety-500"
+              type="range"
+              min="-24"
+              max="24"
+              :value="store.selectedLayerAdjustment.rotateY"
+              @input="store.setLayerTilt(store.highlightedPart, store.selectedLayerAdjustment.rotateX, Number(($event.target as HTMLInputElement).value))"
+            />
+            <button type="button" class="border border-white/15 px-2 py-1 text-[11px] font-extrabold text-white/70 hover:border-safety-500" @click="store.resetLayerTiltY(store.highlightedPart)">Reset</button>
+          </div>
         </label>
 
         <label class="block">
@@ -292,20 +341,32 @@ onUnmounted(() => {
             <span>上下透视</span>
             <span>{{ store.selectedLayerAdjustment.rotateX }} deg</span>
           </span>
-          <input
-            class="mt-2 h-2 w-full accent-safety-500"
-            type="range"
-            min="-18"
-            max="18"
-            :value="store.selectedLayerAdjustment.rotateX"
-            @input="store.setLayerTilt(store.highlightedPart, Number(($event.target as HTMLInputElement).value), store.selectedLayerAdjustment.rotateY)"
-          />
+          <div class="mt-2 flex items-center gap-2">
+            <input
+              class="h-2 flex-1 accent-safety-500"
+              type="range"
+              min="-18"
+              max="18"
+              :value="store.selectedLayerAdjustment.rotateX"
+              @input="store.setLayerTilt(store.highlightedPart, Number(($event.target as HTMLInputElement).value), store.selectedLayerAdjustment.rotateY)"
+            />
+            <button type="button" class="border border-white/15 px-2 py-1 text-[11px] font-extrabold text-white/70 hover:border-safety-500" @click="store.resetLayerTiltX(store.highlightedPart)">Reset</button>
+          </div>
         </label>
       </div>
     </div>
 
-    <div class="absolute bottom-5 right-5 hidden bg-iron-950/86 px-4 py-3 text-xs font-semibold text-white/80 backdrop-blur md:block">
-      拖动部件校准位置，拖动空白移动画面，滚轮缩放
+    <div class="absolute bottom-5 right-5 flex gap-2" data-layer-control="true">
+      <button
+        type="button"
+        class="bg-iron-950/86 px-4 py-3 text-xs font-extrabold text-white/85 backdrop-blur transition hover:bg-safety-500 hover:text-iron-950"
+        @click="toggleFullscreen"
+      >
+        {{ isFullscreen ? '退出全屏' : '全屏展示' }}
+      </button>
+      <div class="hidden bg-iron-950/86 px-4 py-3 text-xs font-semibold text-white/80 backdrop-blur md:block">
+        拖动部件校准位置，拖动空白移动画面，滚轮缩放
+      </div>
     </div>
 
     <div
