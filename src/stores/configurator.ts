@@ -4,7 +4,8 @@ import catalogJson from '../data/products.json'
 import type { Bucket, Excavator, ProductCatalog, Tooth } from '../types/product'
 
 const catalog = catalogJson as ProductCatalog
-const storageKey = 'bucket-demo-2d:configurator:v1'
+const storageKey = 'bucket-demo-2d:configurator:v2'
+const legacyStorageKey = 'bucket-demo-2d:configurator:v1'
 
 export type HighlightPart = 'excavator' | 'bucket' | 'tooth'
 
@@ -16,6 +17,16 @@ export type LayerAdjustment = {
   rotateY: number
 }
 
+export type CombinationPerspective = {
+  rotateX: number
+  rotateY: number
+}
+
+export type CombinationLayout = {
+  layerAdjustments: Record<HighlightPart, LayerAdjustment>
+  perspective: CombinationPerspective
+}
+
 const defaultAdjustment: LayerAdjustment = {
   offsetX: 0,
   offsetY: 0,
@@ -24,8 +35,24 @@ const defaultAdjustment: LayerAdjustment = {
   rotateY: 0,
 }
 
+const defaultPerspective: CombinationPerspective = {
+  rotateX: 2,
+  rotateY: -7,
+}
+
 function cloneDefaultAdjustment() {
   return { ...defaultAdjustment }
+}
+
+function createDefaultLayout(): CombinationLayout {
+  return {
+    layerAdjustments: {
+      excavator: cloneDefaultAdjustment(),
+      bucket: cloneDefaultAdjustment(),
+      tooth: cloneDefaultAdjustment(),
+    },
+    perspective: { ...defaultPerspective },
+  }
 }
 
 type PersistedState = {
@@ -37,7 +64,10 @@ type PersistedState = {
   panX?: number
   panY?: number
   showcaseView?: boolean
+  combinationLayouts?: Record<string, Partial<CombinationLayout>>
+  currentLayout?: Partial<CombinationLayout>
   layerAdjustments?: Partial<Record<HighlightPart, Partial<LayerAdjustment>>>
+  perspective?: Partial<CombinationPerspective>
 }
 
 function isHighlightPart(value: unknown): value is HighlightPart {
@@ -58,15 +88,51 @@ function normalizeAdjustment(value: Partial<LayerAdjustment> | undefined): Layer
   }
 }
 
+function normalizePerspective(value: Partial<CombinationPerspective> | undefined): CombinationPerspective {
+  return {
+    rotateX: Math.round(clamp(value?.rotateX, -18, 18, defaultPerspective.rotateX)),
+    rotateY: Math.round(clamp(value?.rotateY, -24, 24, defaultPerspective.rotateY)),
+  }
+}
+
+function normalizeLayout(value: Partial<CombinationLayout> | undefined): CombinationLayout {
+  return {
+    layerAdjustments: {
+      excavator: normalizeAdjustment(value?.layerAdjustments?.excavator),
+      bucket: normalizeAdjustment(value?.layerAdjustments?.bucket),
+      tooth: normalizeAdjustment(value?.layerAdjustments?.tooth),
+    },
+    perspective: normalizePerspective(value?.perspective),
+  }
+}
+
+function normalizeLegacyLayout(
+  layerAdjustments: Partial<Record<HighlightPart, Partial<LayerAdjustment>>> | undefined,
+  perspective: Partial<CombinationPerspective> | undefined,
+): CombinationLayout {
+  return {
+    layerAdjustments: {
+      excavator: normalizeAdjustment(layerAdjustments?.excavator),
+      bucket: normalizeAdjustment(layerAdjustments?.bucket),
+      tooth: normalizeAdjustment(layerAdjustments?.tooth),
+    },
+    perspective: normalizePerspective(perspective),
+  }
+}
+
 function readPersistedState(): PersistedState | null {
   if (typeof window === 'undefined') return null
 
   try {
-    const raw = window.localStorage.getItem(storageKey)
+    const raw = window.localStorage.getItem(storageKey) ?? window.localStorage.getItem(legacyStorageKey)
     return raw ? (JSON.parse(raw) as PersistedState) : null
   } catch {
     return null
   }
+}
+
+function createCombinationKey(excavatorId: string, bucketId: string, toothId: string) {
+  return `${excavatorId}::${bucketId}::${toothId}`
 }
 
 export const useConfiguratorStore = defineStore('configurator', () => {
@@ -74,18 +140,26 @@ export const useConfiguratorStore = defineStore('configurator', () => {
   const persistedExcavatorId = persisted?.selectedExcavatorId
   const persistedBucketId = persisted?.selectedBucketId
   const persistedToothId = persisted?.selectedToothId
-  const selectedExcavatorId = ref(catalog.excavators.some((item) => item.id === persistedExcavatorId) ? persistedExcavatorId : catalog.defaults.excavatorId)
-  const selectedBucketId = ref(catalog.buckets.some((item) => item.id === persistedBucketId) ? persistedBucketId : catalog.defaults.bucketId)
-  const selectedToothId = ref(catalog.teeth.some((item) => item.id === persistedToothId) ? persistedToothId : catalog.defaults.toothId)
+  const initialExcavatorId = catalog.excavators.some((item) => item.id === persistedExcavatorId) && persistedExcavatorId ? persistedExcavatorId : catalog.defaults.excavatorId
+  const initialBucketId = catalog.buckets.some((item) => item.id === persistedBucketId) && persistedBucketId ? persistedBucketId : catalog.defaults.bucketId
+  const initialToothId = catalog.teeth.some((item) => item.id === persistedToothId) && persistedToothId ? persistedToothId : catalog.defaults.toothId
+  const selectedExcavatorId = ref(initialExcavatorId)
+  const selectedBucketId = ref(initialBucketId)
+  const selectedToothId = ref(initialToothId)
   const highlightedPart = ref<HighlightPart>(isHighlightPart(persisted?.highlightedPart) ? persisted.highlightedPart : 'tooth')
   const scale = ref(clamp(persisted?.scale, 0.48, 1.8, 0.9))
   const panX = ref(Math.round(clamp(persisted?.panX, -420, 420, 0)))
   const panY = ref(Math.round(clamp(persisted?.panY, -260, 260, 0)))
   const showcaseView = ref(typeof persisted?.showcaseView === 'boolean' ? persisted.showcaseView : true)
-  const layerAdjustments = ref<Record<HighlightPart, LayerAdjustment>>({
-    excavator: normalizeAdjustment(persisted?.layerAdjustments?.excavator),
-    bucket: normalizeAdjustment(persisted?.layerAdjustments?.bucket),
-    tooth: normalizeAdjustment(persisted?.layerAdjustments?.tooth),
+  const initialCombinationKey = createCombinationKey(selectedExcavatorId.value, selectedBucketId.value, selectedToothId.value)
+  const initialLayout = persisted?.combinationLayouts?.[initialCombinationKey] || persisted?.currentLayout
+    ? normalizeLayout(persisted.combinationLayouts?.[initialCombinationKey] ?? persisted.currentLayout)
+    : normalizeLegacyLayout(persisted?.layerAdjustments, persisted?.perspective)
+  const combinationLayouts = ref<Record<string, CombinationLayout>>({
+    ...(persisted?.combinationLayouts
+      ? Object.fromEntries(Object.entries(persisted.combinationLayouts).map(([key, value]) => [key, normalizeLayout(value)]))
+      : {}),
+    [initialCombinationKey]: initialLayout,
   })
 
   const excavators = computed(() => catalog.excavators)
@@ -125,6 +199,16 @@ export const useConfiguratorStore = defineStore('configurator', () => {
     const current = compatibleTeeth.value.find((item) => item.id === selectedToothId.value)
     return current ?? compatibleTeeth.value[0] ?? catalog.teeth[0]
   })
+
+  const combinationKey = computed(() => createCombinationKey(selectedExcavator.value.id, selectedBucket.value.id, selectedTooth.value.id))
+
+  const currentLayout = computed(() => {
+    return combinationLayouts.value[combinationKey.value] ?? createDefaultLayout()
+  })
+
+  const layerAdjustments = computed(() => currentLayout.value.layerAdjustments)
+
+  const combinationPerspective = computed(() => currentLayout.value.perspective)
 
   const selectedLayerAdjustment = computed(() => layerAdjustments.value[highlightedPart.value])
 
@@ -176,8 +260,9 @@ export const useConfiguratorStore = defineStore('configurator', () => {
   }
 
   function updateLayerAdjustment(part: HighlightPart, patch: Partial<LayerAdjustment>) {
-    layerAdjustments.value[part] = {
-      ...layerAdjustments.value[part],
+    const layout = ensureCurrentLayout()
+    layout.layerAdjustments[part] = {
+      ...layout.layerAdjustments[part],
       ...patch,
     }
   }
@@ -204,15 +289,35 @@ export const useConfiguratorStore = defineStore('configurator', () => {
   }
 
   function resetLayerAdjustment(part: HighlightPart) {
-    layerAdjustments.value[part] = cloneDefaultAdjustment()
+    const layout = ensureCurrentLayout()
+    layout.layerAdjustments[part] = cloneDefaultAdjustment()
   }
 
   function resetAllLayerAdjustments() {
-    layerAdjustments.value = {
-      excavator: cloneDefaultAdjustment(),
-      bucket: cloneDefaultAdjustment(),
-      tooth: cloneDefaultAdjustment(),
+    const layout = ensureCurrentLayout()
+    layout.layerAdjustments = createDefaultLayout().layerAdjustments
+  }
+
+  function ensureCurrentLayout() {
+    if (!combinationLayouts.value[combinationKey.value]) {
+      combinationLayouts.value[combinationKey.value] = createDefaultLayout()
     }
+
+    return combinationLayouts.value[combinationKey.value]
+  }
+
+  function setCombinationPerspective(rotateX: number, rotateY: number) {
+    const layout = ensureCurrentLayout()
+    layout.perspective = normalizePerspective({ rotateX, rotateY })
+  }
+
+  function resetCombinationPerspective() {
+    const layout = ensureCurrentLayout()
+    layout.perspective = { ...defaultPerspective }
+  }
+
+  function resetCurrentCombinationLayout() {
+    combinationLayouts.value[combinationKey.value] = createDefaultLayout()
   }
 
   function zoomIn() {
@@ -252,11 +357,11 @@ export const useConfiguratorStore = defineStore('configurator', () => {
     selectedToothId.value = catalog.defaults.toothId
     highlightedPart.value = 'tooth'
     resetView()
-    resetAllLayerAdjustments()
     ensureCompatibleSelection()
   }
 
   ensureCompatibleSelection()
+  ensureCurrentLayout()
 
   watch(
     [
@@ -268,7 +373,7 @@ export const useConfiguratorStore = defineStore('configurator', () => {
       panX,
       panY,
       showcaseView,
-      layerAdjustments,
+      combinationLayouts,
     ],
     () => {
       if (typeof window === 'undefined') return
@@ -282,7 +387,8 @@ export const useConfiguratorStore = defineStore('configurator', () => {
         panX: panX.value,
         panY: panY.value,
         showcaseView: showcaseView.value,
-        layerAdjustments: layerAdjustments.value,
+        currentLayout: currentLayout.value,
+        combinationLayouts: combinationLayouts.value,
       }
 
       window.localStorage.setItem(storageKey, JSON.stringify(nextState))
@@ -303,7 +409,10 @@ export const useConfiguratorStore = defineStore('configurator', () => {
     panX,
     panY,
     showcaseView,
+    combinationKey,
+    combinationLayouts,
     layerAdjustments,
+    combinationPerspective,
     selectedExcavator,
     selectedBucket,
     selectedTooth,
@@ -323,6 +432,9 @@ export const useConfiguratorStore = defineStore('configurator', () => {
     setLayerTilt,
     resetLayerAdjustment,
     resetAllLayerAdjustments,
+    setCombinationPerspective,
+    resetCombinationPerspective,
+    resetCurrentCombinationLayout,
     zoomIn,
     zoomOut,
     setScale,

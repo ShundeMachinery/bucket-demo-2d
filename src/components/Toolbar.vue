@@ -36,7 +36,7 @@ function exportPreview() {
         展台视角
       </button>
       <button type="button" class="tool-button" title="重置视图" @click="store.resetView">复位视图</button>
-      <button type="button" class="tool-button" title="重置三层位置和大小" @click="store.resetAllLayerAdjustments">重置部件</button>
+      <button type="button" class="tool-button" title="重置当前组合的位置、大小和透视" @click="store.resetCurrentCombinationLayout">重置组合</button>
       <button type="button" class="tool-button" title="恢复默认组合" @click="store.restoreDefaultCombination">推荐组合</button>
       <button type="button" class="tool-button bg-iron-950 text-white hover:bg-iron-800" title="导出当前预览为 PNG" @click="exportPreview">导出 PNG</button>
     </div>

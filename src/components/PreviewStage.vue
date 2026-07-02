@@ -162,7 +162,7 @@ onUnmounted(() => {
       :style="{
         width: `${store.catalog.stage.width}px`,
         height: `${store.catalog.stage.height}px`,
-        transform: `translate(calc(-50% + ${store.panX}px), calc(-50% + ${store.panY}px)) scale(${store.scale}) ${store.showcaseView ? 'perspective(1400px) rotateX(2deg) rotateY(-7deg)' : ''}`,
+        transform: `translate(calc(-50% + ${store.panX}px), calc(-50% + ${store.panY}px)) scale(${store.scale}) ${store.showcaseView ? `perspective(1400px) rotateX(${store.combinationPerspective.rotateX}deg) rotateY(${store.combinationPerspective.rotateY}deg)` : ''}`,
         transformOrigin: 'center center',
         transformStyle: 'preserve-3d',
       }"
@@ -210,19 +210,53 @@ onUnmounted(() => {
     <div class="absolute right-5 top-5 w-[min(300px,calc(100%-2.5rem))] bg-iron-950/88 p-4 text-white shadow-xl backdrop-blur" data-layer-control="true">
       <div class="flex items-start justify-between gap-3">
         <div>
-          <p class="text-[11px] font-extrabold uppercase tracking-[0.16em] text-safety-500">Layer Adjust</p>
-          <p class="mt-1 text-base font-extrabold">{{ selectedLayer.label }}校准</p>
+          <p class="text-[11px] font-extrabold uppercase tracking-[0.16em] text-safety-500">Layout Adjust</p>
+          <p class="mt-1 text-base font-extrabold">{{ selectedLayer.label }} / 当前组合</p>
         </div>
         <button
           type="button"
           class="border border-white/15 px-2 py-1 text-xs font-extrabold text-white/75 transition hover:border-safety-500 hover:text-safety-500"
-          @click="store.resetLayerAdjustment(store.highlightedPart)"
+          @click="store.resetCurrentCombinationLayout"
         >
-          重置
+          重置组合
         </button>
       </div>
 
       <div class="mt-4 space-y-4">
+        <div class="border-b border-white/10 pb-4">
+          <p class="text-xs font-extrabold text-white/80">组合整体透视</p>
+          <label class="mt-3 block">
+            <span class="flex items-center justify-between text-xs font-bold text-white/60">
+              <span>整体上下</span>
+              <span>{{ store.combinationPerspective.rotateX }} deg</span>
+            </span>
+            <input
+              class="mt-2 h-2 w-full accent-safety-500"
+              type="range"
+              min="-18"
+              max="18"
+              :value="store.combinationPerspective.rotateX"
+              @input="store.setCombinationPerspective(Number(($event.target as HTMLInputElement).value), store.combinationPerspective.rotateY)"
+            />
+          </label>
+
+          <label class="mt-3 block">
+            <span class="flex items-center justify-between text-xs font-bold text-white/60">
+              <span>整体左右</span>
+              <span>{{ store.combinationPerspective.rotateY }} deg</span>
+            </span>
+            <input
+              class="mt-2 h-2 w-full accent-safety-500"
+              type="range"
+              min="-24"
+              max="24"
+              :value="store.combinationPerspective.rotateY"
+              @input="store.setCombinationPerspective(store.combinationPerspective.rotateX, Number(($event.target as HTMLInputElement).value))"
+            />
+          </label>
+        </div>
+
+        <p class="text-xs font-extrabold text-white/80">单个部件校准</p>
         <label class="block">
           <span class="flex items-center justify-between text-xs font-bold text-white/60">
             <span>单层大小</span>
