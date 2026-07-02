@@ -1,9 +1,10 @@
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { defineStore } from 'pinia'
 import catalogJson from '../data/products.json'
 import type { Bucket, Excavator, ProductCatalog, Tooth } from '../types/product'
 
 const catalog = catalogJson as ProductCatalog
+const storageKey = 'bucket-demo-2d:configurator:v1'
 
 export type HighlightPart = 'excavator' | 'bucket' | 'tooth'
 
@@ -27,19 +28,64 @@ function cloneDefaultAdjustment() {
   return { ...defaultAdjustment }
 }
 
+type PersistedState = {
+  selectedExcavatorId?: string
+  selectedBucketId?: string
+  selectedToothId?: string
+  highlightedPart?: HighlightPart
+  scale?: number
+  panX?: number
+  panY?: number
+  showcaseView?: boolean
+  layerAdjustments?: Partial<Record<HighlightPart, Partial<LayerAdjustment>>>
+}
+
+function isHighlightPart(value: unknown): value is HighlightPart {
+  return value === 'excavator' || value === 'bucket' || value === 'tooth'
+}
+
+function clamp(value: unknown, min: number, max: number, fallback: number) {
+  return typeof value === 'number' && Number.isFinite(value) ? Math.min(max, Math.max(min, value)) : fallback
+}
+
+function normalizeAdjustment(value: Partial<LayerAdjustment> | undefined): LayerAdjustment {
+  return {
+    offsetX: Math.round(clamp(value?.offsetX, -800, 800, 0)),
+    offsetY: Math.round(clamp(value?.offsetY, -500, 500, 0)),
+    scale: Number(clamp(value?.scale, 0.55, 1.6, 1).toFixed(2)),
+    rotateX: Math.round(clamp(value?.rotateX, -18, 18, 0)),
+    rotateY: Math.round(clamp(value?.rotateY, -24, 24, 0)),
+  }
+}
+
+function readPersistedState(): PersistedState | null {
+  if (typeof window === 'undefined') return null
+
+  try {
+    const raw = window.localStorage.getItem(storageKey)
+    return raw ? (JSON.parse(raw) as PersistedState) : null
+  } catch {
+    return null
+  }
+}
+
 export const useConfiguratorStore = defineStore('configurator', () => {
-  const selectedExcavatorId = ref(catalog.defaults.excavatorId)
-  const selectedBucketId = ref(catalog.defaults.bucketId)
-  const selectedToothId = ref(catalog.defaults.toothId)
-  const highlightedPart = ref<HighlightPart>('tooth')
-  const scale = ref(0.9)
-  const panX = ref(0)
-  const panY = ref(0)
-  const showcaseView = ref(true)
+  const persisted = readPersistedState()
+  const persistedExcavatorId = persisted?.selectedExcavatorId
+  const persistedBucketId = persisted?.selectedBucketId
+  const persistedToothId = persisted?.selectedToothId
+  const selectedExcavatorId = ref(catalog.excavators.some((item) => item.id === persistedExcavatorId) ? persistedExcavatorId : catalog.defaults.excavatorId)
+  const selectedBucketId = ref(catalog.buckets.some((item) => item.id === persistedBucketId) ? persistedBucketId : catalog.defaults.bucketId)
+  const selectedToothId = ref(catalog.teeth.some((item) => item.id === persistedToothId) ? persistedToothId : catalog.defaults.toothId)
+  const highlightedPart = ref<HighlightPart>(isHighlightPart(persisted?.highlightedPart) ? persisted.highlightedPart : 'tooth')
+  const scale = ref(clamp(persisted?.scale, 0.48, 1.8, 0.9))
+  const panX = ref(Math.round(clamp(persisted?.panX, -420, 420, 0)))
+  const panY = ref(Math.round(clamp(persisted?.panY, -260, 260, 0)))
+  const showcaseView = ref(typeof persisted?.showcaseView === 'boolean' ? persisted.showcaseView : true)
   const layerAdjustments = ref<Record<HighlightPart, LayerAdjustment>>({
-    excavator: cloneDefaultAdjustment(),
-    bucket: cloneDefaultAdjustment(),
-    tooth: cloneDefaultAdjustment(),
+    excavator: normalizeAdjustment(persisted?.layerAdjustments?.excavator),
+    bucket: normalizeAdjustment(persisted?.layerAdjustments?.bucket),
+    tooth: normalizeAdjustment(persisted?.layerAdjustments?.tooth),
   })
 
   const excavators = computed(() => catalog.excavators)
@@ -211,6 +257,38 @@ export const useConfiguratorStore = defineStore('configurator', () => {
   }
 
   ensureCompatibleSelection()
+
+  watch(
+    [
+      selectedExcavatorId,
+      selectedBucketId,
+      selectedToothId,
+      highlightedPart,
+      scale,
+      panX,
+      panY,
+      showcaseView,
+      layerAdjustments,
+    ],
+    () => {
+      if (typeof window === 'undefined') return
+
+      const nextState: PersistedState = {
+        selectedExcavatorId: selectedExcavatorId.value,
+        selectedBucketId: selectedBucketId.value,
+        selectedToothId: selectedToothId.value,
+        highlightedPart: highlightedPart.value,
+        scale: scale.value,
+        panX: panX.value,
+        panY: panY.value,
+        showcaseView: showcaseView.value,
+        layerAdjustments: layerAdjustments.value,
+      }
+
+      window.localStorage.setItem(storageKey, JSON.stringify(nextState))
+    },
+    { deep: true },
+  )
 
   return {
     catalog,
