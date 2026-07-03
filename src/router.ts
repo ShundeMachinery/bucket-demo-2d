@@ -21,7 +21,24 @@ const routes: Record<AppRouteName, AppRoute> = {
   },
 }
 
-const currentPath = ref(normalizePath(window.location.pathname))
+const appBasePath = import.meta.env.BASE_URL
+const currentPath = ref(normalizePath(stripBasePath(window.location.pathname)))
+
+function stripBasePath(path: string) {
+  if (appBasePath === '/') return path
+
+  const normalizedBase = appBasePath.replace(/\/+$/, '')
+  if (!path.startsWith(normalizedBase)) return path
+
+  return path.slice(normalizedBase.length) || '/'
+}
+
+function withBasePath(path: string) {
+  const normalizedBase = appBasePath.replace(/\/+$/, '')
+  if (!normalizedBase) return path
+
+  return `${normalizedBase}${path}`
+}
 
 function normalizePath(path: string) {
   const normalized = path.replace(/\/+$/, '') || '/'
@@ -34,7 +51,7 @@ function routeFromPath(path: string) {
 }
 
 window.addEventListener('popstate', () => {
-  currentPath.value = normalizePath(window.location.pathname)
+  currentPath.value = normalizePath(stripBasePath(window.location.pathname))
 })
 
 export const currentRoute = computed(() => routeFromPath(currentPath.value))
@@ -43,6 +60,6 @@ export function navigateTo(routeName: AppRouteName) {
   const nextRoute = routes[routeName]
   if (currentPath.value === nextRoute.path) return
 
-  window.history.pushState({}, nextRoute.title, nextRoute.path)
+  window.history.pushState({}, nextRoute.title, withBasePath(nextRoute.path))
   currentPath.value = nextRoute.path
 }

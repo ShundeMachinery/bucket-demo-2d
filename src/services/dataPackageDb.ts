@@ -1,5 +1,6 @@
 import type { DataPackage } from '../types/dataPackage'
 import type { ProductCatalog, ProductPart } from '../types/product'
+import { resolveAssetPath } from './assetPath'
 import { createZipBlob, readZipEntries, type ZipEntry, type ZipReadEntry } from './zip'
 
 const dbName = 'bucket-demo-2d-db'
@@ -99,7 +100,7 @@ async function urlToDataUrl(url: string) {
 }
 
 async function urlToBlob(url: string) {
-  const response = await fetch(url)
+  const response = await fetch(resolveAssetPath(url))
   if (!response.ok) {
     throw new Error(`图片无法导出：${url}`)
   }

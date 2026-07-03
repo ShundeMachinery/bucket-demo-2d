@@ -2,6 +2,7 @@
 import Konva from 'konva'
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { useConfiguratorStore, type HighlightPart } from '../stores/configurator'
+import { resolveAssetPath } from '../services/assetPath'
 import type { ProductPart } from '../types/product'
 
 const store = useConfiguratorStore()
@@ -144,7 +145,7 @@ function loadImage(src: string) {
     imageCache[src] = image
   }
   image.crossOrigin = 'anonymous'
-  image.src = src
+  image.src = resolveAssetPath(src)
 }
 
 function setImageRef(part: HighlightPart, node: { getNode: () => Konva.Image } | null) {

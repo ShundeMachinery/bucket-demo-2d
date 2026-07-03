@@ -9,6 +9,39 @@ bun install
 bun run dev
 ```
 
+## Build
+
+```bash
+bun run build
+bun run preview
+```
+
+GitHub Pages 仓库页需要带仓库名前缀，手动验证线上路径时可运行：
+
+```bash
+bun run build:gh-pages
+bun run preview
+```
+
+## Deploy To GitHub Pages
+
+本项目已包含 GitHub Actions 自动部署配置：`.github/workflows/deploy.yml`。
+
+1. 推送代码到 GitHub `main` 分支。
+2. 打开仓库 `Settings` -> `Pages`。
+3. 将 `Build and deployment` 的 `Source` 设置为 `GitHub Actions`。
+4. 等待 `Actions` 中的 `Deploy GitHub Pages` 工作流完成。
+5. 访问 `https://shundemachinery.github.io/bucket-demo-2d/`。
+
+工作流会自动执行：
+
+```bash
+bun install --frozen-lockfile
+bun run build
+```
+
+并把 `dist/` 发布到 GitHub Pages。为了支持 `/data` 页面刷新，部署时会复制 `dist/index.html` 为 `dist/404.html`。
+
 ## Structure
 
 ```text
