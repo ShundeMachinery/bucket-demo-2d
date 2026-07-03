@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "skills": {
+    "code-documenter": {
+      "source": "jeffallan/claude-skills",
+      "sourceType": "github",
+      "skillPath": "skills/code-documenter/SKILL.md",
+      "computedHash": "49709db09641a9ab4196459835bfcbe565eb0581c23cb4eeb50ff80d2af88272"
+    },
+    "code-reviewer": {
+      "source": "jeffallan/claude-skills",
+      "sourceType": "github",
+      "skillPath": "skills/code-reviewer/SKILL.md",
+      "computedHash": "57ab3eba6fa596bc52d73ca7312afc2f389d9622714d25b2ab3d4bbf03dc293a"
+    },
+    "database-optimizer": {
+      "source": "jeffallan/claude-skills",
+      "sourceType": "github",
+      "skillPath": "skills/database-optimizer/SKILL.md",
+      "computedHash": "2feb5b0765151417dab90bf014df41514386e4bdb25aad9ab38498c0bd18a1d8"
+    },
+    "vue-expert": {
+      "source": "jeffallan/claude-skills",
+      "sourceType": "github",
+      "skillPath": "skills/vue-expert/SKILL.md",
+      "computedHash": "7276996f25e0e22316d480d12a51ea8f7441cc9855e79590ed0f5e2a25da4714"
+    },
+    "vue-expert-js": {
+      "source": "jeffallan/claude-skills",
+      "sourceType": "github",
+      "skillPath": "skills/vue-expert-js/SKILL.md",
+      "computedHash": "f9480e6f932c64f0f87a609691bbf587978f21017f9104b4010c4890b03dea16"
+    }
+  }
+}

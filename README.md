@@ -13,6 +13,9 @@ bun run dev
 
 ```text
 src/
+  views/
+    ConfiguratorView.vue
+    DataManagerView.vue
   components/
     ProductSelectorPanel.vue
     PreviewStage.vue
@@ -29,6 +32,7 @@ src/
   types/
     dataPackage.ts
     product.ts
+  router.ts
 public/
   assets/
     equipment/
