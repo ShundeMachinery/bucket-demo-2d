@@ -12,8 +12,8 @@ const imageRefs = reactive<Partial<Record<HighlightPart, { getNode: () => Konva.
 const imageCache = reactive<Record<string, HTMLImageElement | undefined>>({})
 const viewportSize = reactive({ width: 900, height: 620 })
 const isExporting = ref(false)
-const isAdjustPanelOpen = ref(false)
 const isFullscreen = ref(false)
+const isProductCardOpen = ref(true)
 const isStageDragging = ref(false)
 const isSpacePressed = ref(false)
 const selectedParts = ref<HighlightPart[]>([store.highlightedPart])
@@ -62,6 +62,49 @@ const selectedLabel = computed(() => {
   }
 
   return `${selectedLayer.value.label}：${selectedLayer.value.part.name}`
+})
+
+const featuredSellingPoints = computed(() => {
+  const source = selectedParts.value.length === 1
+    ? selectedLayer.value.part.sellingPoints
+    : [
+        ...store.selectedBucket.sellingPoints,
+        ...store.selectedTooth.sellingPoints,
+        ...store.selectedExcavator.sellingPoints,
+      ]
+
+  return source.slice(0, 3)
+})
+
+const selectedPartMeta = computed(() => {
+  if (store.highlightedPart === 'excavator') {
+    return {
+      label: '吨位',
+      value: store.selectedExcavator.tonnage,
+    }
+  }
+
+  if (store.highlightedPart === 'bucket') {
+    return {
+      label: '斗容',
+      value: store.selectedBucket.capacity,
+    }
+  }
+
+  return {
+    label: '材质',
+    value: store.selectedTooth.material,
+  }
+})
+
+const productCardHint = computed(() => {
+  if (!isProductCardOpen.value) {
+    return `${selectedLayer.value.label} / ${selectedLayer.value.part.name}`
+  }
+
+  return store.isCanvasLocked
+    ? '展示锁定中，可拖动画布与缩放视图。'
+    : '点击底部部件标签可切换当前信息。'
 })
 
 const stageConfig = computed(() => ({
@@ -594,62 +637,73 @@ onUnmounted(() => {
       </button>
     </div>
 
-    <div class="absolute right-5 top-5 z-20 w-[min(320px,calc(100%-2.5rem))] bg-iron-950/88 text-white shadow-xl backdrop-blur">
-      <div class="flex items-start justify-between gap-3">
-        <button type="button" class="flex-1 p-4 text-left" @click="isAdjustPanelOpen = !isAdjustPanelOpen">
-          <p class="text-[11px] font-extrabold uppercase tracking-[0.16em] text-safety-500">Konva Transformer</p>
-          <p class="mt-1 text-base font-extrabold">{{ store.isCanvasLocked ? '画布已锁定' : selectedParts.length > 1 ? `多选 ${selectedParts.length} 个部件` : `${selectedLayer.label} / 当前组合` }}</p>
+    <div class="absolute right-5 top-5 z-20 w-[min(360px,calc(100%-2.5rem))] overflow-hidden bg-iron-950/90 text-white shadow-xl backdrop-blur">
+      <div class="flex items-start justify-between gap-3 border-b border-white/10">
+        <button
+          type="button"
+          class="flex-1 p-4 text-left transition hover:bg-white/5"
+          :aria-expanded="isProductCardOpen"
+          @click="isProductCardOpen = !isProductCardOpen"
+        >
+          <p class="text-[11px] font-extrabold uppercase tracking-[0.16em] text-safety-500">Product Information</p>
+          <p class="mt-1 text-lg font-extrabold leading-tight">{{ store.combinationCode }}</p>
+          <p class="mt-2 text-xs font-semibold leading-5 text-white/58">{{ productCardHint }}</p>
         </button>
         <button
           type="button"
-          class="m-4 border border-white/15 px-2 py-1 text-xs font-extrabold text-white/75 transition hover:border-safety-500 hover:text-safety-500"
-          @click="isAdjustPanelOpen = !isAdjustPanelOpen"
+          class="m-3 shrink-0 border border-white/10 px-3 py-2 text-xs font-extrabold text-white/70 transition hover:border-safety-500 hover:bg-safety-500 hover:text-iron-950"
+          :aria-expanded="isProductCardOpen"
+          @click="isProductCardOpen = !isProductCardOpen"
         >
-          {{ isAdjustPanelOpen ? '收起' : '展开' }}
+          {{ isProductCardOpen ? '收起' : '展开' }}
         </button>
       </div>
 
-      <div v-if="isAdjustPanelOpen" class="space-y-4 border-t border-white/10 p-4 pt-4">
-        <div class="flex gap-2">
-          <button
-            type="button"
-            class="flex-1 border border-white/15 px-2 py-2 text-xs font-extrabold text-white/75 transition hover:border-safety-500 hover:text-safety-500 disabled:cursor-not-allowed disabled:opacity-40"
-            :disabled="store.isCanvasLocked"
-            @click="store.resetCurrentCombinationLayout"
-          >
-            重置组合
-          </button>
-          <button
-            type="button"
-            class="flex-1 border border-white/15 px-2 py-2 text-xs font-extrabold text-white/75 transition hover:border-safety-500 hover:text-safety-500 disabled:cursor-not-allowed disabled:opacity-40"
-            :disabled="store.isCanvasLocked"
-            @click="store.resetLayerAdjustment(store.highlightedPart)"
-          >
-            重置单层
-          </button>
-        </div>
-
-        <div class="border-b border-white/10 pb-4">
-          <p class="text-xs font-extrabold text-white/80">画布操作</p>
-          <div class="mt-3 space-y-2 text-xs font-semibold leading-5 text-white/62">
-            <p v-if="store.isCanvasLocked">锁定模式：左键拖动任意位置移动画布。</p>
-            <p v-if="!store.isCanvasLocked">点击部件：选择并显示控制框。</p>
-            <p v-if="!store.isCanvasLocked">拖动空白：框选多个部件。</p>
-            <p v-if="!store.isCanvasLocked">Shift + 点击部件：加入或移出多选。</p>
-            <p v-if="!store.isCanvasLocked">拖动已选部件：多选时一起移动。</p>
-            <p v-if="!store.isCanvasLocked">拖动顶部旋转点：旋转部件。</p>
-            <p v-if="!store.isCanvasLocked">按住空格 + 左键拖动：移动整个画布。</p>
-            <p>滚轮缩放视图，工具栏可复位。</p>
+      <div v-if="isProductCardOpen" class="space-y-4 p-4">
+        <div class="grid grid-cols-3 gap-2 text-xs">
+          <div class="border border-white/10 bg-white/6 p-2">
+            <p class="font-bold text-white/42">主机</p>
+            <p class="mt-1 truncate font-extrabold text-white">{{ store.selectedExcavator.name }}</p>
+            <p class="mt-1 font-semibold text-safety-500">{{ store.selectedExcavator.tonnage }}</p>
+          </div>
+          <div class="border border-white/10 bg-white/6 p-2">
+            <p class="font-bold text-white/42">挖斗</p>
+            <p class="mt-1 truncate font-extrabold text-white">{{ store.selectedBucket.name }}</p>
+            <p class="mt-1 font-semibold text-safety-500">{{ store.selectedBucket.capacity }}</p>
+          </div>
+          <div class="border border-white/10 bg-white/6 p-2">
+            <p class="font-bold text-white/42">斗齿</p>
+            <p class="mt-1 truncate font-extrabold text-white">{{ store.selectedTooth.name }}</p>
+            <p class="mt-1 font-semibold text-safety-500">{{ store.selectedTooth.material }}</p>
           </div>
         </div>
 
-        <div class="grid grid-cols-2 gap-2 text-xs">
-          <button type="button" class="border border-white/15 px-2 py-2 font-extrabold text-white/75 transition hover:border-safety-500 hover:text-safety-500 disabled:cursor-not-allowed disabled:opacity-40" :disabled="store.isCanvasLocked" @click="store.resetLayerScale(store.highlightedPart)">重置大小</button>
-          <button type="button" class="border border-white/15 px-2 py-2 font-extrabold text-white/75 transition hover:border-safety-500 hover:text-safety-500 disabled:cursor-not-allowed disabled:opacity-40" :disabled="store.isCanvasLocked" @click="store.resetLayerRotation(store.highlightedPart)">重置旋转</button>
+        <div class="border-l-4 border-safety-500 bg-white/8 p-3">
+          <p class="text-xs font-extrabold text-white/50">当前关注</p>
+          <p class="mt-1 text-base font-extrabold">{{ selectedLayer.label }} / {{ selectedLayer.part.name }}</p>
+          <p class="mt-1 text-xs font-semibold text-white/62">{{ selectedPartMeta.label }}：{{ selectedPartMeta.value }}</p>
         </div>
 
-        <div class="border-t border-white/10 pt-3 text-xs font-semibold leading-5 text-white/55">
-          当前：大小 {{ Math.round(store.selectedLayerAdjustment.scale * 100) }}%，旋转 {{ store.selectedLayerAdjustment.rotateZ }} deg。
+        <div>
+          <p class="text-xs font-extrabold text-white/50">适配说明</p>
+          <p class="mt-2 line-clamp-3 text-sm font-semibold leading-6 text-white/72">{{ store.fitmentSummary }}</p>
+        </div>
+
+        <div v-if="featuredSellingPoints.length">
+          <p class="text-xs font-extrabold text-white/50">核心卖点</p>
+          <div class="mt-2 space-y-2">
+            <p
+              v-for="point in featuredSellingPoints"
+              :key="point"
+              class="bg-safety-500/12 px-3 py-2 text-xs font-semibold leading-5 text-white/82"
+            >
+              {{ point }}
+            </p>
+          </div>
+        </div>
+
+        <div class="border-t border-white/10 pt-3 text-xs font-semibold leading-5 text-white/48">
+          备注：{{ store.remarkSummary }}
         </div>
       </div>
     </div>
