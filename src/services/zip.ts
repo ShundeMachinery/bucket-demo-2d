@@ -3,6 +3,12 @@ export type ZipEntry = {
   data: string | Uint8Array
 }
 
+export type ZipReadEntry = {
+  path: string
+  data: Uint8Array
+  text: () => string
+}
+
 type ZipRecord = {
   name: Uint8Array
   data: Uint8Array
@@ -13,6 +19,7 @@ type ZipRecord = {
 }
 
 const encoder = new TextEncoder()
+const decoder = new TextDecoder()
 const crcTable = createCrcTable()
 
 function createCrcTable() {
@@ -178,4 +185,100 @@ export function createZipBlob(entries: ZipEntry[]) {
   }
 
   return new Blob([zipBytes.buffer], { type: 'application/zip' })
+}
+
+function findEndOfCentralDirectory(bytes: Uint8Array) {
+  const minLength = 22
+  const maxCommentLength = 0xffff
+  const start = Math.max(0, bytes.length - minLength - maxCommentLength)
+
+  for (let offset = bytes.length - minLength; offset >= start; offset -= 1) {
+    if (
+      bytes[offset] === 0x50 &&
+      bytes[offset + 1] === 0x4b &&
+      bytes[offset + 2] === 0x05 &&
+      bytes[offset + 3] === 0x06
+    ) {
+      return offset
+    }
+  }
+
+  return -1
+}
+
+function sliceBytes(bytes: Uint8Array, start: number, end: number) {
+  return bytes.slice(start, end)
+}
+
+function copyToArrayBuffer(bytes: Uint8Array) {
+  const buffer = new ArrayBuffer(bytes.byteLength)
+  new Uint8Array(buffer).set(bytes)
+
+  return buffer
+}
+
+async function inflateDeflatedData(data: Uint8Array) {
+  if (typeof DecompressionStream === 'undefined') {
+    throw new Error('当前浏览器不支持读取压缩 ZIP，请使用本页面导出的 ZIP，或换用新版 Chrome/Edge。')
+  }
+
+  const stream = new Blob([copyToArrayBuffer(data)])
+    .stream()
+    .pipeThrough(new DecompressionStream('deflate-raw'))
+  return new Uint8Array(await new Response(stream).arrayBuffer())
+}
+
+export async function readZipEntries(blob: Blob): Promise<ZipReadEntry[]> {
+  const bytes = new Uint8Array(await blob.arrayBuffer())
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+  const eocdOffset = findEndOfCentralDirectory(bytes)
+
+  if (eocdOffset < 0) {
+    throw new Error('ZIP 文件格式不正确，未找到中央目录。')
+  }
+
+  const totalEntries = view.getUint16(eocdOffset + 10, true)
+  const centralDirectoryOffset = view.getUint32(eocdOffset + 16, true)
+  const entries: ZipReadEntry[] = []
+  let cursor = centralDirectoryOffset
+
+  for (let index = 0; index < totalEntries; index += 1) {
+    if (view.getUint32(cursor, true) !== 0x02014b50) {
+      throw new Error('ZIP 中央目录损坏，无法读取数据包。')
+    }
+
+    const compressionMethod = view.getUint16(cursor + 10, true)
+    const compressedSize = view.getUint32(cursor + 20, true)
+    const fileNameLength = view.getUint16(cursor + 28, true)
+    const extraLength = view.getUint16(cursor + 30, true)
+    const commentLength = view.getUint16(cursor + 32, true)
+    const localHeaderOffset = view.getUint32(cursor + 42, true)
+    const path = decoder.decode(sliceBytes(bytes, cursor + 46, cursor + 46 + fileNameLength))
+
+    cursor += 46 + fileNameLength + extraLength + commentLength
+
+    if (!path || path.endsWith('/')) continue
+
+    if (compressionMethod !== 0 && compressionMethod !== 8) {
+      throw new Error(`暂不支持压缩算法 ${compressionMethod} 的 ZIP，请使用本页面导出的数据包。`)
+    }
+
+    if (view.getUint32(localHeaderOffset, true) !== 0x04034b50) {
+      throw new Error(`ZIP 条目损坏：${path}`)
+    }
+
+    const localFileNameLength = view.getUint16(localHeaderOffset + 26, true)
+    const localExtraLength = view.getUint16(localHeaderOffset + 28, true)
+    const dataStart = localHeaderOffset + 30 + localFileNameLength + localExtraLength
+    const compressedData = sliceBytes(bytes, dataStart, dataStart + compressedSize)
+    const data = compressionMethod === 8 ? await inflateDeflatedData(compressedData) : compressedData
+
+    entries.push({
+      path: normalizeZipPath(path),
+      data,
+      text: () => decoder.decode(data),
+    })
+  }
+
+  return entries
 }

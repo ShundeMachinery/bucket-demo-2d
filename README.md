@@ -1,6 +1,6 @@
 # Bucket Demo 2D
 
-Vue 3 + Vite + Pinia + Tailwind 的挖掘机斗齿 2D 装配展示 MVP。
+Vue 3 + Vite + Pinia + Tailwind + Konva 的挖掘机斗齿 2D 装配展示 MVP。
 
 ## Run
 
@@ -55,6 +55,10 @@ public/
 
 The demo uses SVG placeholders under `public/assets/equipment`. Replace those paths with transparent PNG or production SVG files in `products.json`; keep `dimensions`, `anchor`, and `hotspot` aligned to the 1280 x 720 stage.
 
+## Preview Canvas
+
+The preview stage uses `Konva + vue-konva` instead of DOM image layers. Product images are rendered as Canvas objects, selected parts use Konva Transformer controls for dragging, resizing, and rotating, and PNG export uses Konva `stage.toDataURL()`.
+
 ## Data Packages
 
 The app can save and load one complete browser-local data package through IndexedDB. Open `数据管理` in the app to:
@@ -89,4 +93,4 @@ customer-demo/
       tooth-01.png
 ```
 
-To reload an exported ZIP, unzip it first and choose the extracted folder with `导入文件夹`. Image paths are matched by path or file name and stored in browser-local IndexedDB for offline use.
+To reload an exported ZIP, open `数据包管理` and choose `导入 ZIP 数据包` directly. The app reads `data-package.json`, restores image files from `assets/equipment/`, and stores the active package in browser-local IndexedDB for offline use. The older JSON/folder import flow remains available under advanced operations for compatibility.

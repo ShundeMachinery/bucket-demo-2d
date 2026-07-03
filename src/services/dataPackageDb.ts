@@ -1,11 +1,12 @@
 import type { DataPackage } from '../types/dataPackage'
 import type { ProductCatalog, ProductPart } from '../types/product'
-import { createZipBlob, type ZipEntry } from './zip'
+import { createZipBlob, readZipEntries, type ZipEntry, type ZipReadEntry } from './zip'
 
 const dbName = 'bucket-demo-2d-db'
 const dbVersion = 1
 const storeName = 'dataPackages'
 const activePackageKey = 'active'
+const dataManagerDraftKey = 'data-manager-draft'
 
 type PartGroup = 'excavators' | 'buckets' | 'teeth'
 
@@ -62,6 +63,18 @@ export function saveActiveDataPackage(dataPackage: DataPackage) {
 
 export function clearActiveDataPackage() {
   return withStore<undefined>('readwrite', (store) => store.delete(activePackageKey))
+}
+
+export function getDataManagerDraft<T>() {
+  return withStore<T | undefined>('readonly', (store) => store.get(dataManagerDraftKey))
+}
+
+export function saveDataManagerDraft<T>(draft: T) {
+  return withStore<IDBValidKey>('readwrite', (store) => store.put(draft, dataManagerDraftKey))
+}
+
+export function clearDataManagerDraft() {
+  return withStore<undefined>('readwrite', (store) => store.delete(dataManagerDraftKey))
 }
 
 export function createDataPackage(name: string, catalog: ProductCatalog, layouts: Record<string, DataPackage['layouts'][string]>): DataPackage {
@@ -134,6 +147,20 @@ function extensionFromPath(path: string) {
   return extension?.toLowerCase() ?? 'bin'
 }
 
+function mimeFromPath(path: string) {
+  const extension = extensionFromPath(path)
+  const mimeMap: Record<string, string> = {
+    svg: 'image/svg+xml',
+    png: 'image/png',
+    jpg: 'image/jpeg',
+    jpeg: 'image/jpeg',
+    webp: 'image/webp',
+    gif: 'image/gif',
+  }
+
+  return mimeMap[extension] ?? 'application/octet-stream'
+}
+
 function safeFileSegment(value: string) {
   return value
     .trim()
@@ -169,7 +196,7 @@ export async function embedCatalogImages(dataPackage: DataPackage) {
   }
 
   if (failedImages.length) {
-    throw new Error(`以下图片无法内嵌，请改用“导入文件夹”或检查路径：${failedImages.join('；')}`)
+    throw new Error(`以下图片无法内嵌，请检查路径或先用高级入口导入包含图片的文件夹：${failedImages.join('；')}`)
   }
 
   return nextPackage
@@ -206,7 +233,7 @@ export async function createPortableDataPackage(dataPackage: DataPackage) {
   }
 
   if (failedImages.length) {
-    throw new Error(`以下图片无法写入 ZIP，请改用“导入文件夹”或检查路径：${failedImages.join('；')}`)
+    throw new Error(`以下图片无法写入 ZIP，请检查路径或先用高级入口导入包含图片的文件夹：${failedImages.join('；')}`)
   }
 
   return {
@@ -252,7 +279,7 @@ export async function downloadDataPackageZip(dataPackage: DataPackage) {
         'data-package.json: 产品数据、描述、参数、兼容关系、组合校准',
         'assets/equipment/: 产品图片文件',
         '',
-        '在网页的数据包管理页选择“导入文件夹”，选中解压后的整个文件夹即可恢复。',
+        '在网页的数据包管理页选择“导入 ZIP 数据包”，直接选择此 ZIP 即可恢复，无需解压。',
       ].join('\n'),
     },
     ...assets.map((asset) => ({
@@ -288,6 +315,23 @@ function fileToDataUrl(file: File) {
   })
 }
 
+function copyToArrayBuffer(bytes: Uint8Array) {
+  const buffer = new ArrayBuffer(bytes.byteLength)
+  new Uint8Array(buffer).set(bytes)
+
+  return buffer
+}
+
+function bytesToDataUrl(bytes: Uint8Array, mimeType: string) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader()
+    const blob = new Blob([copyToArrayBuffer(bytes)], { type: mimeType })
+    reader.onerror = () => reject(reader.error)
+    reader.onload = () => resolve(String(reader.result))
+    reader.readAsDataURL(blob)
+  })
+}
+
 function getAllParts(catalog: ProductCatalog) {
   return [
     ...catalog.excavators.map((part) => ({ group: 'excavators' as PartGroup, part })),
@@ -310,6 +354,16 @@ function findAssetFile(files: File[], imagePath: string) {
 
   return files.find((file) => {
     const relativePath = normalizePath(file.webkitRelativePath || file.name)
+    return relativePath.endsWith(normalizedImage) || Boolean(imageBasename && relativePath.endsWith(imageBasename))
+  })
+}
+
+function findAssetEntry(entries: ZipReadEntry[], imagePath: string) {
+  const normalizedImage = normalizePath(imagePath)
+  const imageBasename = normalizedImage.split('/').at(-1)
+
+  return entries.find((entry) => {
+    const relativePath = normalizePath(entry.path)
     return relativePath.endsWith(normalizedImage) || Boolean(imageBasename && relativePath.endsWith(imageBasename))
   })
 }
@@ -339,6 +393,47 @@ export async function createDataPackageFromFolder(files: File[]) {
   return {
     ...dataPackage,
     name: dataPackage.name || jsonFile.webkitRelativePath.split('/')[0] || 'bucket-demo-data',
+    updatedAt: new Date().toISOString(),
+    catalog,
+  }
+}
+
+export async function createDataPackageFromZip(file: File) {
+  const entries = await readZipEntries(file)
+  const jsonEntry = entries.find((entry) => {
+    const path = normalizePath(entry.path)
+    return path.endsWith('data-package.json') || path.endsWith('products.json')
+  })
+
+  if (!jsonEntry) {
+    throw new Error('ZIP 里没有找到 data-package.json 或 products.json。')
+  }
+
+  const parsed = JSON.parse(jsonEntry.text()) as DataPackage | ProductCatalog
+  const dataPackage = 'catalog' in parsed && 'layouts' in parsed
+    ? parsed
+    : createDataPackage(file.name.replace(/\.zip$/i, ''), parsed, {})
+  const catalog = cloneSerializable(dataPackage.catalog)
+  const missingImages: string[] = []
+
+  for (const { group, part } of getAllParts(catalog)) {
+    if (!part.image || part.image.startsWith('data:')) continue
+
+    const assetEntry = findAssetEntry(entries, part.image)
+    if (assetEntry) {
+      updatePartImage(catalog, group, part.id, await bytesToDataUrl(assetEntry.data, mimeFromPath(assetEntry.path)))
+    } else {
+      missingImages.push(`${part.name}: ${part.image}`)
+    }
+  }
+
+  if (missingImages.length) {
+    throw new Error(`ZIP 中缺少以下图片文件：${missingImages.join('；')}`)
+  }
+
+  return {
+    ...dataPackage,
+    name: dataPackage.name || file.name.replace(/\.zip$/i, '') || 'bucket-demo-data',
     updatedAt: new Date().toISOString(),
     catalog,
   }
