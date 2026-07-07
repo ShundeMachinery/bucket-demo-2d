@@ -1,6 +1,7 @@
 import type { DataPackage } from '../types/dataPackage'
 import type { ProductCatalog, ProductPart } from '../types/product'
 import { resolveAssetPath } from './assetPath'
+import { dataPackageToSqliteBytes, sqliteBytesToDataPackage, sqliteFileToDataPackage } from './sqliteDataPackage'
 import { createZipBlob, readZipEntries, type ZipEntry, type ZipReadEntry } from './zip'
 
 const dbName = 'bucket-demo-2d-db'
@@ -15,6 +16,15 @@ type ImageAsset = {
   path: string
   data: Uint8Array
 }
+
+type StoredSqlitePackage = {
+  format: 'sqlite'
+  name: string
+  updatedAt: string
+  bytes: Uint8Array | number[] | ArrayBuffer
+}
+
+type StoredPackage = DataPackage | StoredSqlitePackage
 
 export function cloneSerializable<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T
@@ -54,12 +64,36 @@ async function withStore<T>(mode: IDBTransactionMode, operation: (store: IDBObje
   })
 }
 
-export function getActiveDataPackage() {
-  return withStore<DataPackage | undefined>('readonly', (store) => store.get(activePackageKey))
+function isStoredSqlitePackage(value: unknown): value is StoredSqlitePackage {
+  return Boolean(value && typeof value === 'object' && 'format' in value && value.format === 'sqlite')
 }
 
-export function saveActiveDataPackage(dataPackage: DataPackage) {
-  return withStore<IDBValidKey>('readwrite', (store) => store.put(dataPackage, activePackageKey))
+function sqliteBytesFromStoredPackage(value: StoredSqlitePackage) {
+  if (value.bytes instanceof Uint8Array) return value.bytes
+  if (value.bytes instanceof ArrayBuffer) return new Uint8Array(value.bytes)
+
+  return new Uint8Array(value.bytes)
+}
+
+export async function getActiveDataPackage() {
+  const saved = await withStore<StoredPackage | undefined>('readonly', (store) => store.get(activePackageKey))
+  if (!saved) return undefined
+
+  return isStoredSqlitePackage(saved)
+    ? sqliteBytesToDataPackage(sqliteBytesFromStoredPackage(saved), saved.name)
+    : saved
+}
+
+export async function saveActiveDataPackage(dataPackage: DataPackage) {
+  const bytes = await dataPackageToSqliteBytes(dataPackage)
+  const storedPackage: StoredSqlitePackage = {
+    format: 'sqlite',
+    name: dataPackage.name,
+    updatedAt: dataPackage.updatedAt,
+    bytes,
+  }
+
+  return withStore<IDBValidKey>('readwrite', (store) => store.put(storedPackage, activePackageKey))
 }
 
 export function clearActiveDataPackage() {
@@ -86,6 +120,15 @@ export function createDataPackage(name: string, catalog: ProductCatalog, layouts
     catalog: cloneSerializable(catalog),
     layouts: cloneSerializable(layouts ?? {}),
   }
+}
+
+export async function loadBuiltinDataPackage() {
+  const response = await fetch(resolveAssetPath('/data/mock-products.sqlite'))
+  if (!response.ok) {
+    throw new Error('内置 SQLite 产品数据库加载失败。')
+  }
+
+  return sqliteBytesToDataPackage(new Uint8Array(await response.arrayBuffer()), 'mock-products')
 }
 
 async function urlToDataUrl(url: string) {
@@ -204,16 +247,11 @@ export async function embedCatalogImages(dataPackage: DataPackage) {
 }
 
 export async function downloadDataPackage(dataPackage: DataPackage) {
-  const embeddedPackage = await embedCatalogImages(dataPackage)
-  const payload = JSON.stringify(
-    {
-      ...embeddedPackage,
-      updatedAt: new Date().toISOString(),
-    },
-    null,
-    2,
+  const sqliteBytes = await dataPackageToSqliteBytes(dataPackage, { embedExternalImages: true })
+  downloadBlob(
+    new Blob([copyToArrayBuffer(sqliteBytes)], { type: 'application/vnd.sqlite3' }),
+    `${dataPackage.name || 'bucket-demo-data'}.sqlite`,
   )
-  downloadBlob(new Blob([payload], { type: 'application/json;charset=utf-8' }), `${embeddedPackage.name || 'bucket-demo-data'}.json`)
 }
 
 export async function createPortableDataPackage(dataPackage: DataPackage) {
@@ -266,30 +304,26 @@ async function createImageAsset(group: PartGroup, part: ProductPart): Promise<Im
 }
 
 export async function downloadDataPackageZip(dataPackage: DataPackage) {
-  const { assets, ...portablePackage } = await createPortableDataPackage(dataPackage)
+  const sqliteBytes = await dataPackageToSqliteBytes(dataPackage, { embedExternalImages: true })
   const entries: ZipEntry[] = [
     {
-      path: 'data-package.json',
-      data: JSON.stringify(portablePackage, null, 2),
+      path: 'bucket-demo.sqlite',
+      data: sqliteBytes,
     },
     {
       path: 'README.txt',
       data: [
-        'Bucket Demo 数据包',
+        'Bucket Demo SQLite 数据包',
         '',
-        'data-package.json: 产品数据、描述、参数、兼容关系、组合校准',
-        'assets/equipment/: 产品图片文件',
+        'bucket-demo.sqlite: 产品数据、分类、图片、描述、参数、兼容关系、组合校准',
+        '图片已经写入 SQLite 的 product_assets 表，可直接导入，不需要解压。',
         '',
         '在网页的数据包管理页选择“导入 ZIP 数据包”，直接选择此 ZIP 即可恢复，无需解压。',
       ].join('\n'),
     },
-    ...assets.map((asset) => ({
-      path: asset.path,
-      data: asset.data,
-    })),
   ]
 
-  downloadBlob(createZipBlob(entries), `${portablePackage.name || 'bucket-demo-data'}.zip`)
+  downloadBlob(createZipBlob(entries), `${dataPackage.name || 'bucket-demo-data'}.zip`)
 }
 
 export async function readJsonFile(file: File) {
@@ -303,8 +337,16 @@ export async function readJsonFile(file: File) {
   return createDataPackage(file.name.replace(/\.json$/i, ''), parsed, {})
 }
 
+export function readSqliteFile(file: File) {
+  return sqliteFileToDataPackage(file)
+}
+
 function normalizePath(path: string) {
   return path.replace(/^\.?\//, '').replace(/^public\//, '').replace(/^src\//, '').replace(/^data\//, '')
+}
+
+function isSqlitePath(path: string) {
+  return /\.(sqlite|sqlite3|db)$/i.test(path)
 }
 
 function fileToDataUrl(file: File) {
@@ -370,13 +412,38 @@ function findAssetEntry(entries: ZipReadEntry[], imagePath: string) {
 }
 
 export async function createDataPackageFromFolder(files: File[]) {
+  const sqliteFile = files.find((file) => {
+    return isSqlitePath(normalizePath(file.webkitRelativePath || file.name))
+  })
+
+  if (sqliteFile) {
+    const dataPackage = await sqliteFileToDataPackage(sqliteFile)
+    const catalog = cloneSerializable(dataPackage.catalog)
+
+    for (const { group, part } of getAllParts(catalog)) {
+      if (!part.image || part.image.startsWith('data:')) continue
+
+      const assetFile = findAssetFile(files, part.image)
+      if (assetFile) {
+        updatePartImage(catalog, group, part.id, await fileToDataUrl(assetFile))
+      }
+    }
+
+    return {
+      ...dataPackage,
+      name: dataPackage.name || sqliteFile.webkitRelativePath.split('/')[0] || 'bucket-demo-data',
+      updatedAt: new Date().toISOString(),
+      catalog,
+    }
+  }
+
   const jsonFile = files.find((file) => {
     const relativePath = normalizePath(file.webkitRelativePath || file.name)
     return relativePath.endsWith('products.json') || relativePath.endsWith('data-package.json')
   })
 
   if (!jsonFile) {
-    throw new Error('文件夹里没有找到 products.json 或 data-package.json')
+    throw new Error('文件夹里没有找到 .sqlite/.db 数据库。旧数据迁移时也可包含 products.json 或 data-package.json。')
   }
 
   const dataPackage = await readJsonFile(jsonFile)
@@ -401,13 +468,36 @@ export async function createDataPackageFromFolder(files: File[]) {
 
 export async function createDataPackageFromZip(file: File) {
   const entries = await readZipEntries(file)
+  const sqliteEntry = entries.find((entry) => isSqlitePath(normalizePath(entry.path)))
+
+  if (sqliteEntry) {
+    const dataPackage = await sqliteBytesToDataPackage(sqliteEntry.data, file.name.replace(/\.zip$/i, ''))
+    const catalog = cloneSerializable(dataPackage.catalog)
+
+    for (const { group, part } of getAllParts(catalog)) {
+      if (!part.image || part.image.startsWith('data:')) continue
+
+      const assetEntry = findAssetEntry(entries, part.image)
+      if (assetEntry) {
+        updatePartImage(catalog, group, part.id, await bytesToDataUrl(assetEntry.data, mimeFromPath(assetEntry.path)))
+      }
+    }
+
+    return {
+      ...dataPackage,
+      name: dataPackage.name || file.name.replace(/\.zip$/i, '') || 'bucket-demo-data',
+      updatedAt: new Date().toISOString(),
+      catalog,
+    }
+  }
+
   const jsonEntry = entries.find((entry) => {
     const path = normalizePath(entry.path)
     return path.endsWith('data-package.json') || path.endsWith('products.json')
   })
 
   if (!jsonEntry) {
-    throw new Error('ZIP 里没有找到 data-package.json 或 products.json。')
+    throw new Error('ZIP 里没有找到 SQLite 数据库。旧数据迁移时也可包含 data-package.json 或 products.json。')
   }
 
   const parsed = JSON.parse(jsonEntry.text()) as DataPackage | ProductCatalog

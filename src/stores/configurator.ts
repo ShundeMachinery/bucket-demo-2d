@@ -1,13 +1,85 @@
 import { computed, ref, watch } from 'vue'
 import { defineStore } from 'pinia'
-import catalogJson from '../data/products.json'
-import { cloneSerializable, createDataPackage, getActiveDataPackage, saveActiveDataPackage } from '../services/dataPackageDb'
+import { cloneSerializable, createDataPackage, getActiveDataPackage, loadBuiltinDataPackage, saveActiveDataPackage } from '../services/dataPackageDb'
 import type { DataPackage } from '../types/dataPackage'
 import type { Bucket, Excavator, ProductCatalog, Tooth } from '../types/product'
 
-const defaultCatalog = catalogJson as ProductCatalog
 const storageKey = 'bucket-demo-2d:configurator:v2'
 const legacyStorageKey = 'bucket-demo-2d:configurator:v1'
+
+const fallbackCatalog: ProductCatalog = {
+  stage: {
+    width: 1280,
+    height: 720,
+    defaultScale: 0.9,
+  },
+  defaults: {
+    excavatorId: 'loading-excavator',
+    bucketId: 'loading-bucket',
+    toothId: 'loading-tooth',
+  },
+  excavators: [
+    {
+      id: 'loading-excavator',
+      name: '正在加载产品数据库',
+      series: 'SQLite',
+      tonnage: '--',
+      image: '',
+      anchor: { x: 430, y: 470 },
+      hotspot: { x: 610, y: 430, radius: 42, label: '加载中' },
+      dimensions: { width: 820, height: 420 },
+      compatibleBucketIds: ['loading-bucket'],
+      description: '正在读取 SQLite 产品数据库。',
+      sellingPoints: [],
+      notes: '请稍候。',
+    },
+  ],
+  buckets: [
+    {
+      id: 'loading-bucket',
+      name: '正在加载挖斗',
+      series: 'SQLite',
+      capacity: '--',
+      image: '',
+      anchor: { x: 810, y: 486 },
+      hotspot: { x: 968, y: 546, radius: 36, label: '加载中' },
+      dimensions: { width: 360, height: 235 },
+      compatibleExcavatorIds: ['loading-excavator'],
+      compatibleToothIds: ['loading-tooth'],
+      mountOffset: { x: 0, y: 0 },
+      description: '正在读取 SQLite 产品数据库。',
+      sellingPoints: [],
+      notes: '请稍候。',
+    },
+  ],
+  teeth: [
+    {
+      id: 'loading-tooth',
+      name: '正在加载斗齿',
+      series: 'SQLite',
+      material: '--',
+      image: '',
+      anchor: { x: 1012, y: 552 },
+      hotspot: { x: 1035, y: 555, radius: 22, label: '加载中' },
+      dimensions: { width: 132, height: 78 },
+      compatibleBucketIds: ['loading-bucket'],
+      mountOffset: { x: 0, y: 0 },
+      description: '正在读取 SQLite 产品数据库。',
+      sellingPoints: [],
+      notes: '请稍候。',
+    },
+  ],
+  compatibility: [
+    {
+      id: 'fit-loading',
+      excavatorId: 'loading-excavator',
+      bucketId: 'loading-bucket',
+      toothIds: ['loading-tooth'],
+      fitment: '正在加载 SQLite 产品数据库。',
+      remark: '请稍候。',
+    },
+  ],
+}
 
 export type HighlightPart = 'excavator' | 'bucket' | 'tooth'
 
@@ -160,14 +232,14 @@ export const useConfiguratorStore = defineStore('configurator', () => {
   const persistedExcavatorId = persisted?.selectedExcavatorId
   const persistedBucketId = persisted?.selectedBucketId
   const persistedToothId = persisted?.selectedToothId
-  const activeCatalog = ref<ProductCatalog>(cloneSerializable(defaultCatalog))
+  const activeCatalog = ref<ProductCatalog>(cloneSerializable(fallbackCatalog))
   const dataPackageName = ref('mock-products')
   const dataPackageUpdatedAt = ref('')
-  const isDataPackageLoading = ref(false)
+  const isDataPackageLoading = ref(true)
   const isDataPackageSaving = ref(false)
-  const initialExcavatorId = defaultCatalog.excavators.some((item) => item.id === persistedExcavatorId) && persistedExcavatorId ? persistedExcavatorId : defaultCatalog.defaults.excavatorId
-  const initialBucketId = defaultCatalog.buckets.some((item) => item.id === persistedBucketId) && persistedBucketId ? persistedBucketId : defaultCatalog.defaults.bucketId
-  const initialToothId = defaultCatalog.teeth.some((item) => item.id === persistedToothId) && persistedToothId ? persistedToothId : defaultCatalog.defaults.toothId
+  const initialExcavatorId = fallbackCatalog.excavators.some((item) => item.id === persistedExcavatorId) && persistedExcavatorId ? persistedExcavatorId : fallbackCatalog.defaults.excavatorId
+  const initialBucketId = fallbackCatalog.buckets.some((item) => item.id === persistedBucketId) && persistedBucketId ? persistedBucketId : fallbackCatalog.defaults.bucketId
+  const initialToothId = fallbackCatalog.teeth.some((item) => item.id === persistedToothId) && persistedToothId ? persistedToothId : fallbackCatalog.defaults.toothId
   const selectedExcavatorId = ref(initialExcavatorId)
   const selectedBucketId = ref(initialBucketId)
   const selectedToothId = ref(initialToothId)
@@ -415,16 +487,15 @@ export const useConfiguratorStore = defineStore('configurator', () => {
     isDataPackageLoading.value = true
     try {
       const saved = await getActiveDataPackage()
-      if (saved) {
-        applyDataPackage(saved, {
-          selection: {
-            selectedExcavatorId: persisted?.selectedExcavatorId,
-            selectedBucketId: persisted?.selectedBucketId,
-            selectedToothId: persisted?.selectedToothId,
-          },
-          layoutOverrides: persisted?.combinationLayouts,
-        })
-      }
+      const dataPackage = saved ?? await loadBuiltinDataPackage()
+      applyDataPackage(dataPackage, {
+        selection: {
+          selectedExcavatorId: persisted?.selectedExcavatorId,
+          selectedBucketId: persisted?.selectedBucketId,
+          selectedToothId: persisted?.selectedToothId,
+        },
+        layoutOverrides: persisted?.combinationLayouts,
+      })
     } finally {
       isDataPackageLoading.value = false
     }
@@ -456,7 +527,7 @@ export const useConfiguratorStore = defineStore('configurator', () => {
   }
 
   async function resetToMockDataPackage() {
-    applyDataPackage(createDataPackage('mock-products', cloneSerializable(defaultCatalog), {}))
+    applyDataPackage(await loadBuiltinDataPackage())
     await persistActiveDataPackage()
   }
 

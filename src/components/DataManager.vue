@@ -6,15 +6,17 @@ import {
   cloneSerializable,
   createDataPackageFromFolder,
   createDataPackageFromZip,
+  downloadDataPackage,
   downloadDataPackageZip,
   getDataManagerDraft,
   readJsonFile,
+  readSqliteFile,
   saveDataManagerDraft,
 } from '../services/dataPackageDb'
 import type { Bucket, Excavator, ProductPart, Tooth } from '../types/product'
 
 const store = useConfiguratorStore()
-const message = ref('导入客户数据，或导出一个包含图片文件与全部校准的 ZIP 数据包；ZIP 可直接导入，不需要解压。')
+const message = ref('导入 SQLite 客户数据库，或导出一个包含 SQLite 数据库与全部校准的 ZIP 数据包；ZIP 可直接导入，不需要解压。')
 const isBusy = ref(false)
 const showAdvanced = ref(false)
 const productType = ref<HighlightPart>('excavator')
@@ -462,18 +464,38 @@ async function importJson(event: Event) {
   }
 }
 
+async function importSqlite(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+
+  isBusy.value = true
+  message.value = '正在导入 SQLite 数据库...'
+  try {
+    await store.importDataPackage(await readSqliteFile(file))
+    resetForm()
+    showAdvanced.value = false
+    message.value = `已导入 SQLite 数据库：${file.name}。产品数据、图片和组合校准已恢复。`
+  } catch (error) {
+    message.value = error instanceof Error ? error.message : '导入 SQLite 失败'
+  } finally {
+    isBusy.value = false
+    input.value = ''
+  }
+}
+
 async function importZip(event: Event) {
   const input = event.target as HTMLInputElement
   const file = input.files?.[0]
   if (!file) return
 
   isBusy.value = true
-  message.value = '正在读取 ZIP 数据包...'
+  message.value = '正在读取 SQLite ZIP 数据包...'
   try {
     await store.importDataPackage(await createDataPackageFromZip(file))
     resetForm()
     showAdvanced.value = false
-    message.value = `已导入 ZIP 数据包：${file.name}。图片、产品数据和组合校准已恢复。`
+    message.value = `已导入 SQLite ZIP 数据包：${file.name}。图片、产品数据和组合校准已恢复。`
   } catch (error) {
     message.value = error instanceof Error ? error.message : '导入 ZIP 失败'
   } finally {
@@ -503,12 +525,25 @@ async function importFolder(event: Event) {
 
 async function exportPackage() {
   isBusy.value = true
-  message.value = '正在打包 ZIP，包含图片和数据...'
+  message.value = '正在打包 SQLite ZIP，包含图片和数据...'
   try {
     await downloadDataPackageZip(store.getCurrentDataPackage())
-    message.value = '已导出 ZIP 数据包，里面包含 JSON、图片文件和全部组合校准；可直接导入本页面。'
+    message.value = '已导出 ZIP 数据包，里面包含 bucket-demo.sqlite、图片 BLOB 和全部组合校准；可直接导入本页面。'
   } catch (error) {
     message.value = error instanceof Error ? error.message : '导出失败'
+  } finally {
+    isBusy.value = false
+  }
+}
+
+async function exportSqlite() {
+  isBusy.value = true
+  message.value = '正在导出 SQLite 数据库...'
+  try {
+    await downloadDataPackage(store.getCurrentDataPackage())
+    message.value = '已导出 SQLite 数据库，产品图片、兼容关系和组合校准都已写入数据库。'
+  } catch (error) {
+    message.value = error instanceof Error ? error.message : '导出 SQLite 失败'
   } finally {
     isBusy.value = false
   }
@@ -563,7 +598,7 @@ watch(
         <p class="text-[11px] font-extrabold uppercase tracking-[0.22em] text-safety-500">Data Package</p>
         <h1 class="mt-2 text-3xl font-extrabold">数据包管理</h1>
         <p class="mt-2 max-w-3xl text-sm font-semibold leading-6 text-white/65">
-          一个 ZIP 数据包包含：产品图片文件、描述、参数、兼容关系、每个组合的位置、缩放和旋转校准。导出后可直接导入，无需解压。
+          数据现在使用 SQLite 存储：产品分类、图片、描述、参数、兼容关系、每个组合的位置、缩放和旋转校准都会写入数据库。导出的 ZIP 可直接导入，无需解压。
         </p>
       </header>
 
@@ -665,7 +700,7 @@ watch(
                 <input class="hidden" type="file" accept="image/*,.svg" :disabled="isBusy" @change="handleImageUpload" />
               </label>
               <div class="sm:col-span-2 border border-white/10 bg-iron-950/50 px-4 py-3 text-sm font-semibold text-white/65">
-                {{ imageFileName || '建议使用透明 PNG 或 SVG，占位图会随 ZIP 一起导出。' }}
+                {{ imageFileName || '建议使用透明 PNG 或 SVG，导出时会写入 SQLite 图片表。' }}
               </div>
             </div>
 
@@ -766,24 +801,39 @@ watch(
 
           <div class="border border-white/10 bg-white/6 p-5">
             <p class="text-xl font-extrabold">导入数据</p>
-            <p class="mt-2 text-sm leading-6 text-white/60">选择一个本页面导出的 ZIP 数据包，会自动恢复产品图片、描述、参数、兼容关系和组合校准。</p>
-            <div class="mt-5">
+            <p class="mt-2 text-sm leading-6 text-white/60">选择一个 SQLite 数据库，或选择本页面导出的 SQLite ZIP 数据包，会自动恢复产品图片、描述、参数、兼容关系和组合校准。</p>
+            <div class="mt-5 grid gap-3 sm:grid-cols-2">
+              <label class="block cursor-pointer border border-white/15 px-5 py-4 text-center font-extrabold text-white transition hover:border-safety-500 hover:text-safety-500">
+                导入 SQLite 数据库
+                <input class="hidden" type="file" accept=".sqlite,.sqlite3,.db,application/vnd.sqlite3" :disabled="isBusy" @change="importSqlite" />
+              </label>
               <label class="block cursor-pointer bg-white px-5 py-4 text-center font-extrabold text-iron-950 transition hover:bg-safety-500">
-                导入 ZIP 数据包
+                导入 SQLite ZIP
                 <input class="hidden" type="file" accept=".zip,application/zip,application/x-zip-compressed" :disabled="isBusy" @change="importZip" />
               </label>
             </div>
           </div>
 
-          <button
-            type="button"
-            class="block w-full bg-safety-500 p-6 text-left text-iron-950 transition hover:bg-safety-100 disabled:cursor-not-allowed disabled:opacity-60"
-            :disabled="isBusy"
-            @click="exportPackage"
-          >
-            <p class="text-2xl font-extrabold">导出 ZIP 数据包</p>
-            <p class="mt-2 text-sm font-bold leading-6 text-iron-800">ZIP 内含 data-package.json、图片文件和全部组合校准；之后可直接在本页面导入。</p>
-          </button>
+          <div class="grid gap-3 sm:grid-cols-2">
+            <button
+              type="button"
+              class="block bg-white p-6 text-left text-iron-950 transition hover:bg-safety-100 disabled:cursor-not-allowed disabled:opacity-60"
+              :disabled="isBusy"
+              @click="exportSqlite"
+            >
+              <p class="text-2xl font-extrabold">导出 SQLite 数据库</p>
+              <p class="mt-2 text-sm font-bold leading-6 text-iron-800">生成单独的 .sqlite 文件，适合用数据库工具查看和维护。</p>
+            </button>
+            <button
+              type="button"
+              class="block bg-safety-500 p-6 text-left text-iron-950 transition hover:bg-safety-100 disabled:cursor-not-allowed disabled:opacity-60"
+              :disabled="isBusy"
+              @click="exportPackage"
+            >
+              <p class="text-2xl font-extrabold">导出 SQLite ZIP</p>
+              <p class="mt-2 text-sm font-bold leading-6 text-iron-800">ZIP 内含 bucket-demo.sqlite，适合给客户或展会现场备份传输。</p>
+            </button>
+          </div>
 
           <div class="border border-white/10">
             <button type="button" class="w-full px-5 py-3 text-left text-sm font-extrabold text-white/70" @click="showAdvanced = !showAdvanced">
@@ -791,11 +841,11 @@ watch(
             </button>
             <div v-if="showAdvanced" class="grid gap-3 border-t border-white/10 p-5 sm:grid-cols-2">
               <label class="block cursor-pointer border border-white/15 px-4 py-3 text-center text-sm font-extrabold text-white/75 hover:border-safety-500 hover:text-safety-500">
-                兼容导入 JSON
+                旧 JSON 迁移
                 <input class="hidden" type="file" accept="application/json,.json" :disabled="isBusy" @change="importJson" />
               </label>
               <label class="block cursor-pointer border border-white/15 px-4 py-3 text-center text-sm font-extrabold text-white/75 hover:border-safety-500 hover:text-safety-500">
-                兼容导入文件夹
+                旧文件夹迁移
                 <input class="hidden" type="file" webkitdirectory directory multiple :disabled="isBusy" @change="importFolder" />
               </label>
               <button type="button" class="border border-white/15 px-4 py-3 text-sm font-extrabold text-white/75 hover:border-safety-500 hover:text-safety-500" :disabled="isBusy" @click="resetDraft">
@@ -814,6 +864,10 @@ watch(
             <div>
               <dt class="font-bold text-white/45">名称</dt>
               <dd class="mt-1 font-extrabold">{{ store.dataPackageName }}</dd>
+            </div>
+            <div>
+              <dt class="font-bold text-white/45">存储格式</dt>
+              <dd class="mt-1 font-semibold text-white/75">SQLite</dd>
             </div>
             <div>
               <dt class="font-bold text-white/45">产品</dt>

@@ -138,6 +138,7 @@ const transformerConfig = {
 }
 
 function loadImage(src: string) {
+  if (!src) return
   if (imageCache[src]) return
 
   const image = new Image()

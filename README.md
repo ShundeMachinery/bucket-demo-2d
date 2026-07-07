@@ -57,9 +57,9 @@ src/
     Toolbar.vue
   services/
     dataPackageDb.ts
+    sqliteDataPackage.ts
+    sqliteSchema.ts
     zip.ts
-  data/
-    products.json
   stores/
     configurator.ts
   types/
@@ -67,6 +67,8 @@ src/
     product.ts
   router.ts
 public/
+  data/
+    mock-products.sqlite
   assets/
     equipment/
       excavator-*.svg
@@ -76,17 +78,33 @@ public/
 
 ## Data Model
 
-`src/data/products.json` contains:
+The app now uses SQLite as the data package format. The built-in demo database is:
 
-- `excavators`: host machine data with `compatibleBucketIds`.
-- `buckets`: bucket data with `compatibleExcavatorIds` and `compatibleToothIds`.
-- `teeth`: tooth data with `compatibleBucketIds`.
-- `compatibility`: explicit fitment rules for excavator + bucket + teeth.
-- `anchor` and `hotspot`: unified stage coordinates for accurate layer alignment and selection highlights.
+```text
+public/data/mock-products.sqlite
+```
+
+SQLite tables include:
+
+- `products`: excavator, bucket, and tooth base information.
+- `product_categories`: product classification for future filtering and grouping.
+- `product_assets`: image BLOB storage for uploaded/exported product images.
+- `selling_points`: ordered product selling points.
+- `excavator_bucket_compatibility`: excavator-to-bucket constraints.
+- `bucket_tooth_compatibility`: bucket-to-tooth constraints.
+- `fitment_rules` and `fitment_rule_teeth`: explicit fitment text and allowed teeth for a host/bucket pair.
+- `combination_layouts` and `layer_adjustments`: per-combination position, scale, and rotation calibration.
+- `stage`, `defaults`, and `metadata`: canvas setup, default combination, and package metadata.
+
+The schema is defined in `src/services/sqliteSchema.ts`. To regenerate the built-in mock SQLite database from the legacy seed data, run:
+
+```bash
+bun run db:seed
+```
 
 ## Asset Replacement
 
-The demo uses SVG placeholders under `public/assets/equipment`. Replace those paths with transparent PNG or production SVG files in `products.json`; keep `dimensions`, `anchor`, and `hotspot` aligned to the 1280 x 720 stage.
+The demo uses SVG placeholders under `public/assets/equipment`. In production, import products through `数据包管理` and upload transparent PNG or SVG files. Exported SQLite packages write images into `product_assets`, while `dimensions`, `anchor`, and `hotspot` keep product layers aligned to the 1280 x 720 stage.
 
 ## Preview Canvas
 
@@ -94,36 +112,27 @@ The preview stage uses `Konva + vue-konva` instead of DOM image layers. Product 
 
 ## Data Packages
 
-The app can save and load one complete browser-local data package through IndexedDB. Open `数据管理` in the app to:
+The app can save and load one complete browser-local SQLite package through IndexedDB. Open `数据管理` in the app to:
 
-- Import a complete `data-package.json`.
-- Import a folder containing `products.json` or `data-package.json` plus image files.
-- Export a ZIP package containing `data-package.json`, product image files, compatibility rules, and per-combination layout calibration.
+- Import a `.sqlite`, `.sqlite3`, or `.db` database.
+- Import a ZIP package containing `bucket-demo.sqlite`.
+- Export a standalone `.sqlite` database for direct inspection or maintenance.
+- Export a ZIP package containing `bucket-demo.sqlite` with product image BLOBs, compatibility rules, and per-combination layout calibration.
 - Reset to the built-in mock package.
 
 Exported ZIP shape:
 
 ```text
 mock-products.zip
-  data-package.json
+  bucket-demo.sqlite
   README.txt
-  assets/
-    equipment/
-      excavators/
-      buckets/
-      teeth/
 ```
 
 Recommended folder shape:
 
 ```text
 customer-demo/
-  products.json
-  assets/
-    equipment/
-      excavator-01.png
-      bucket-01.png
-      tooth-01.png
+  customer-products.sqlite
 ```
 
-To reload an exported ZIP, open `数据包管理` and choose `导入 ZIP 数据包` directly. The app reads `data-package.json`, restores image files from `assets/equipment/`, and stores the active package in browser-local IndexedDB for offline use. The older JSON/folder import flow remains available under advanced operations for compatibility.
+To reload an exported ZIP, open `数据包管理` and choose `导入 SQLite ZIP` directly. The app reads `bucket-demo.sqlite`, restores product images from `product_assets`, and stores the active package in browser-local IndexedDB as SQLite bytes for offline use. The older JSON/folder import flow remains under advanced operations only for migration.
