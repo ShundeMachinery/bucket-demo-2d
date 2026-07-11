@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 480" role="img" aria-labelledby="title desc">
+  <title id="title">Product placeholder</title>
+  <desc id="desc">Default product illustration for items without a primary image.</desc>
+  <rect width="640" height="480" fill="#f7f8fa"/>
+  <rect x="72" y="96" width="496" height="288" fill="#e7ebef" stroke="#333b46" stroke-opacity=".18" stroke-width="4"/>
+  <path d="M160 318h320l-56-72-54 44-72-94-60 76-38-34-40 80Z" fill="#d8dee5"/>
+  <circle cx="432" cy="174" r="38" fill="#f5b51b"/>
+  <path d="M138 382h364" stroke="#333b46" stroke-opacity=".3" stroke-width="10" stroke-linecap="round"/>
+  <text x="320" y="430" text-anchor="middle" font-family="system-ui, sans-serif" font-size="24" font-weight="700" fill="#333b46" fill-opacity=".72">NO PRIMARY IMAGE</text>
+</svg>

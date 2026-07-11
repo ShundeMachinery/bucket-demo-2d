@@ -1,71 +1,79 @@
-export type Point = {
-  x: number
-  y: number
-}
-
-export type PartDimensions = {
-  width: number
-  height: number
-}
-
-export type Hotspot = Point & {
-  radius: number
+export type ProductCategory = {
+  id: string
+  code: string
   label: string
+  description?: string
 }
 
-export type ProductPart = {
+export type ProductSummary = {
   id: string
+  sku: string
   name: string
-  series: string
-  image: string
-  anchor: Point
-  hotspot: Hotspot
-  dimensions: PartDimensions
-  description: string
-  sellingPoints: string[]
-  notes: string
+  categoryId?: string
+  categoryLabel?: string
+  categoryCode?: string
+  oemNumber?: string
+  externalWeightKg?: number
+  imageUrl?: string
 }
 
-export type Excavator = ProductPart & {
-  tonnage: string
-  compatibleBucketIds: string[]
+export type Product = ProductSummary & {
+  category?: ProductCategory
+  description?: string
+  aliases: string[]
+  weighingDate?: string
+  updatedAt?: string
 }
 
-export type Bucket = ProductPart & {
-  capacity: string
-  compatibleExcavatorIds: string[]
-  compatibleToothIds: string[]
-  mountOffset: Point
-}
-
-export type Tooth = ProductPart & {
-  material: string
-  compatibleBucketIds: string[]
-  mountOffset: Point
-}
-
-export type CompatibilityRule = {
+export type FitmentGroupItem = {
   id: string
-  excavatorId: string
-  bucketId: string
-  toothIds: string[]
-  fitment: string
-  remark: string
+  categoryLabel: string
+  product: ProductSummary
 }
 
-export type ProductCatalog = {
-  stage: {
-    width: number
-    height: number
-    defaultScale: number
-  }
-  defaults: {
-    excavatorId: string
-    bucketId: string
-    toothId: string
-  }
-  excavators: Excavator[]
-  buckets: Bucket[]
-  teeth: Tooth[]
-  compatibility: CompatibilityRule[]
+export type FitmentGroup = {
+  id: string
+  code: string
+  name: string
+  description?: string
+  items: FitmentGroupItem[]
+}
+
+export type FitmentCandidate = {
+  product: ProductSummary
+  categoryLabels: string[]
+  groupIds: string[]
+  groupCodes: string[]
+  groupNames: string[]
+}
+
+export type ProductSearchParams = {
+  search: string
+  categoryId: string | null
+  page: number
+  limit: number
+}
+
+export type ProductSearchResult = {
+  products: Product[]
+  filterCount: number
+  totalCount?: number
+}
+
+export type FitmentGroupSearchParams = {
+  search: string
+  page: number
+  limit: number
+}
+
+export type FitmentGroupSearchResult = {
+  groups: FitmentGroup[]
+  filterCount: number
+  totalCount?: number
+}
+
+export type DirectusDataSourceStatus = {
+  products: number
+  categories: number
+  fitmentGroups: number
 }

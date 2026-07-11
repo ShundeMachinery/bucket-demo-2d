@@ -7,13 +7,12 @@
     "dev": "vite",
     "build": "vue-tsc -b && vite build",
     "build:gh-pages": "VITE_BASE_PATH=/bucket-demo-2d/ bun run build",
-    "db:seed": "bun scripts/create-mock-sqlite.mjs",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "bun test"
   },
   "dependencies": {
     "konva": "^10.3.0",
     "pinia": "^3.0.4",
-    "sql.js": "^1.14.1",
     "vue": "^3.5.39",
     "vue-konva": "^3.4.0"
   },

@@ -17,7 +17,7 @@ const routes: Record<AppRouteName, AppRoute> = {
   data: {
     name: 'data',
     path: '/data',
-    title: '数据包管理',
+    title: 'Directus 数据源',
   },
 }
 

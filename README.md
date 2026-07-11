@@ -1,6 +1,6 @@
 # Bucket Demo 2D
 
-Vue 3 + Vite + Pinia + Tailwind + Konva 的挖掘机斗齿 2D 装配展示 MVP。
+Vue 3 + Vite + Pinia + Tailwind + Konva 的 Directus 产品适配组选配展示。前端不再读取本地 SQLite 或 JSON，业务数据直接来自 Directus REST API。
 
 ## Run
 
@@ -9,11 +9,24 @@ bun install
 bun run dev
 ```
 
-## Build
+默认 Directus 地址：
+
+```text
+http://124.223.157.37:8055
+```
+
+可通过环境变量覆盖：
 
 ```bash
+VITE_DIRECTUS_URL=http://your-directus:8055
+VITE_DIRECTUS_TOKEN=optional-token
+```
+
+## Test And Build
+
+```bash
+bun test
 bun run build
-bun run preview
 ```
 
 GitHub Pages 仓库页需要带仓库名前缀，手动验证线上路径时可运行：
@@ -23,116 +36,70 @@ bun run build:gh-pages
 bun run preview
 ```
 
-## Deploy To GitHub Pages
-
-本项目已包含 GitHub Actions 自动部署配置：`.github/workflows/deploy.yml`。
-
-1. 推送代码到 GitHub `main` 分支。
-2. 打开仓库 `Settings` -> `Pages`。
-3. 将 `Build and deployment` 的 `Source` 设置为 `GitHub Actions`。
-4. 等待 `Actions` 中的 `Deploy GitHub Pages` 工作流完成。
-5. 访问 `https://shundemachinery.github.io/bucket-demo-2d/`。
-
-工作流会自动执行：
-
-```bash
-bun install --frozen-lockfile
-bun run build
-```
-
-并把 `dist/` 发布到 GitHub Pages。为了支持 `/data` 页面刷新，部署时会复制 `dist/index.html` 为 `dist/404.html`。
-
 ## Structure
 
 ```text
 src/
+  catalog/
+    directusCatalog.ts
+    fitmentBuilder.ts
   views/
     ConfiguratorView.vue
     DataManagerView.vue
   components/
     ProductSelectorPanel.vue
-    PreviewStage.vue
-    CombinationSummary.vue
+    FitmentCanvas.vue
+    ProductCard.vue
+    FitmentGroupCard.vue
     DataManager.vue
-    Toolbar.vue
   services/
-    dataPackageDb.ts
-    sqliteDataPackage.ts
-    sqliteSchema.ts
-    zip.ts
+    directus.ts
   stores/
     configurator.ts
-  types/
-    dataPackage.ts
-    product.ts
-  router.ts
-public/
-  data/
-    mock-products.sqlite
-  assets/
-    equipment/
-      excavator-*.svg
-      bucket-*.svg
-      tooth-*.svg
+tests/
+  directus.test.ts
 ```
 
-## Data Model
+## Directus Data Flow
 
-The app now uses SQLite as the data package format. The built-in demo database is:
+前端读取这些集合：
 
-```text
-public/data/mock-products.sqlite
-```
+- `products`: 产品主体，包含 SKU、原始名称、OEM、重量、分类和主图。
+- `categories`: 产品分类。
+- `product_fitment_groups`: 产品适配组。
+- `product_fitment_group_items`: 适配组成员及产品角色。
+- `product_fitment_roles`: 角色字典。
+- `directus_files`: 图片资源，通过 `/assets/:id` 读取。
 
-SQLite tables include:
+选配逻辑：
 
-- `products`: excavator, bucket, and tooth base information.
-- `product_categories`: product classification for future filtering and grouping.
-- `product_assets`: image BLOB storage for uploaded/exported product images.
-- `selling_points`: ordered product selling points.
-- `excavator_bucket_compatibility`: excavator-to-bucket constraints.
-- `bucket_tooth_compatibility`: bucket-to-tooth constraints.
-- `fitment_rules` and `fitment_rule_teeth`: explicit fitment text and allowed teeth for a host/bucket pair.
-- `combination_layouts` and `layer_adjustments`: per-combination position, scale, and rotation calibration.
-- `stage`, `defaults`, and `metadata`: canvas setup, default combination, and package metadata.
+1. 左侧先分页读取 `products`，可按搜索词和分类筛选。
+2. 选择第一件产品后，读取它所属的 `product_fitment_groups`。
+3. 继续选择时，从共同适配组中推导下一步候选产品。
+4. Konva 画布按已选产品顺序加载产品图，可拖动产品来组合位置；图片来自 `products.primary_image_id`，缺图或加载失败时使用默认 SVG。
+5. 当前筛选和已选产品仅保存在 `localStorage`，刷新后恢复操作状态；业务数据始终来自 Directus。
 
-The schema is defined in `src/services/sqliteSchema.ts`. To regenerate the built-in mock SQLite database from the legacy seed data, run:
+## Frontend Scope
+
+前端只做：
+
+- 从 Directus API 读取产品、分类、适配组和图片。
+- 按共同适配组进行“选配”式产品选择。
+- 展示已选产品、共同适配组和下一步候选产品。
+- 用 Konva 画布展示当前选配产品，支持拖动、缩放、旋转和重排；图片加载 Directus `primary_image_id` 并提供默认 SVG fallback。
+- 展示 Directus 数据源连接和集合统计。
+
+前端不再做：
+
+- 导入 SQLite / JSON。
+- 维护本地兼容关系表。
+- 读取或缓存本地业务数据包。
+- 使用旧的主机 / 挖斗 / 斗齿三段 2D 画布布局。
+
+## Verify
+
+测试覆盖 Directus 查询参数序列化、Directus 数据映射和适配候选算法：
 
 ```bash
-bun run db:seed
+bun test
 ```
-
-## Asset Replacement
-
-The demo uses SVG placeholders under `public/assets/equipment`. In production, import products through `数据包管理` and upload transparent PNG or SVG files. Exported SQLite packages write images into `product_assets`, while `dimensions`, `anchor`, and `hotspot` keep product layers aligned to the 1280 x 720 stage.
-
-## Preview Canvas
-
-The preview stage uses `Konva + vue-konva` instead of DOM image layers. Product images are rendered as Canvas objects, selected parts use Konva Transformer controls for dragging, resizing, and rotating, and PNG export uses Konva `stage.toDataURL()`.
-
-## Data Packages
-
-The app can save and load one complete browser-local SQLite package through IndexedDB. Open `数据管理` in the app to:
-
-- Import a `.sqlite`, `.sqlite3`, or `.db` database.
-- Import a ZIP package containing `bucket-demo.sqlite`.
-- Export a standalone `.sqlite` database for direct inspection or maintenance.
-- Export a ZIP package containing `bucket-demo.sqlite` with product image BLOBs, compatibility rules, and per-combination layout calibration.
-- Reset to the built-in mock package.
-
-Exported ZIP shape:
-
-```text
-mock-products.zip
-  bucket-demo.sqlite
-  README.txt
-```
-
-Recommended folder shape:
-
-```text
-customer-demo/
-  customer-products.sqlite
-```
-
-To reload an exported ZIP, open `数据包管理` and choose `导入 SQLite ZIP` directly. The app reads `bucket-demo.sqlite`, restores product images from `product_assets`, and stores the active package in browser-local IndexedDB as SQLite bytes for offline use. The older JSON/folder import flow remains under advanced operations only for migration.
