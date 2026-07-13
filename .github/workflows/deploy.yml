@@ -34,6 +34,7 @@ jobs:
         run: bun run build
         env:
           VITE_BASE_PATH: /${{ github.event.repository.name }}/
+          VITE_DIRECTUS_URL: http://124.223.157.37:8055
 
       - name: Add SPA fallback
         run: cp dist/index.html dist/404.html
