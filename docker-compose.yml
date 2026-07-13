@@ -1,0 +1,15 @@
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VITE_DIRECTUS_URL: /directus
+        VITE_BASE_PATH: /
+    image: ${APP_IMAGE:-ghcr.io/shundemachinery/bucket-demo-2d:latest}
+    container_name: bucket-demo-2d
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-8080}:80"
+    environment:
+      DIRECTUS_UPSTREAM: ${DIRECTUS_UPSTREAM:-http://124.223.157.37:8055}

@@ -36,6 +36,57 @@ bun run build:gh-pages
 bun run preview
 ```
 
+## Docker Deployment
+
+生产镜像使用 Bun 构建前端，并由 Caddy 提供静态文件、SPA fallback 和 Directus 同源反向代理。浏览器只请求当前站点的 `/directus`，无需修改 Directus 的 CORS 或 HTTPS 配置。
+
+构建并启动：
+
+```bash
+docker compose up -d --build
+```
+
+默认访问地址：
+
+```text
+http://localhost:8080
+```
+
+可通过环境变量覆盖宿主机端口、镜像名和 Directus 上游地址：
+
+```bash
+APP_PORT=8080 \
+APP_IMAGE=ghcr.io/shundemachinery/bucket-demo-2d:latest \
+DIRECTUS_UPSTREAM=http://124.223.157.37:8055 \
+docker compose up -d --build
+```
+
+常用运维命令：
+
+```bash
+docker compose ps
+docker compose logs -f web
+docker compose restart web
+docker compose down
+```
+
+推送到 `main`、推送 `v*` 版本标签或手动运行 `Build and Push Container Image` GitHub Actions 后，镜像会发布到：
+
+```text
+ghcr.io/shundemachinery/bucket-demo-2d
+```
+
+`main` 分支生成 `latest` 和 `sha-<完整提交哈希>` 标签，`v*` Git 标签额外生成同名版本镜像标签。服务器拉取并更新：
+
+```bash
+docker compose pull web
+docker compose up -d --no-build
+```
+
+GHCR 包如果保持私有，需要先使用具备 `read:packages` 权限的 GitHub Token 执行 `docker login ghcr.io`；公开包无需登录即可拉取。
+
+服务器如需对外提供 HTTPS，可继续在容器外层使用现有 Nginx、Caddy 或云负载均衡，将域名转发到 `127.0.0.1:8080`。
+
 ## Structure
 
 ```text

@@ -1,0 +1,25 @@
+:80 {
+	encode zstd gzip
+	root * /srv
+
+	handle /directus {
+		redir /directus/ 308
+	}
+
+	handle_path /directus/* {
+		reverse_proxy {$DIRECTUS_UPSTREAM}
+	}
+
+	@staticAssets path /assets/*
+	header @staticAssets Cache-Control "public, max-age=31536000, immutable"
+
+	header {
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+	}
+
+	handle {
+		try_files {path} /index.html
+		file_server
+	}
+}

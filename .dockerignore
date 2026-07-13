@@ -1,0 +1,9 @@
+.git
+.github
+.vscode
+.agents
+.codex
+dist
+node_modules
+*.log
+.DS_Store
