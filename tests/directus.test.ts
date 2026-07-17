@@ -41,7 +41,7 @@ describe('Directus catalog mappers', () => {
     const product = mapProduct({
       id: 'product-1',
       sku: 'BT-001',
-      original_name: '沃尔沃斗齿',
+      oem_number: '沃尔沃斗齿',
       external_weight_kg: 12.5,
       weighing_date: '2026-07-01',
       description: '<p>高耐磨 <strong>斗齿</strong></p>',
@@ -87,7 +87,7 @@ describe('Directus catalog mappers', () => {
           product_id: {
             id: 'product-1',
             sku: 'AD-001',
-            original_name: null,
+            oem_number: null,
             external_weight_kg: null,
             weighing_date: null,
             description: null,
