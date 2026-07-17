@@ -41,7 +41,6 @@ describe('Directus catalog mappers', () => {
     const product = mapProduct({
       id: 'product-1',
       sku: 'BT-001',
-      oem_number: '沃尔沃斗齿',
       external_weight_kg: 12.5,
       weighing_date: '2026-07-01',
       description: '<p>高耐磨 <strong>斗齿</strong></p>',
@@ -62,7 +61,7 @@ describe('Directus catalog mappers', () => {
       },
     } satisfies DirectusProduct)
 
-    expect(product.name).toBe('沃尔沃斗齿')
+    expect(product.name).toBe('OEM-9')
     expect(product.categoryLabel).toBe('斗齿')
     expect(product.description).toBe('高耐磨 斗齿')
     expect(product.aliases).toEqual(['别名 A'])
@@ -87,7 +86,6 @@ describe('Directus catalog mappers', () => {
           product_id: {
             id: 'product-1',
             sku: 'AD-001',
-            oem_number: null,
             external_weight_kg: null,
             weighing_date: null,
             description: null,
@@ -111,6 +109,23 @@ describe('Directus catalog mappers', () => {
     expect(group.items[0].categoryLabel).toBe('齿座')
     expect(group.items[0].product.name).toBe('OEM-1')
     expect(group.items[0].product.imageUrl).toBeUndefined()
+  })
+
+  test('uses the SKU when the OEM number is missing', () => {
+    const product = mapProduct({
+      id: 'product-without-oem',
+      sku: 'BT-002',
+      oem_number: null,
+      external_weight_kg: null,
+      weighing_date: null,
+      description: null,
+      updated_at: null,
+      primary_image_id: null,
+      aliases: null,
+      category_id: null,
+    } satisfies DirectusProduct)
+
+    expect(product.name).toBe('BT-002')
   })
 
   test('converts HTML to plain text without requiring a browser DOM', () => {

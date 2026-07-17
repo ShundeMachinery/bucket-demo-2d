@@ -43,7 +43,6 @@ export type DirectusProduct = {
   weighing_date: string | null
   description: string | null
   updated_at: string | null
-  oem_number: string | null
   primary_image_id: DirectusRelation<DirectusFile>
   aliases: Array<string | DirectusProductAlias> | null
 }
@@ -75,7 +74,6 @@ const productListFields = [
   'id',
   'sku',
   'oem_number',
-  'oem_number',
   'external_weight_kg',
   'weighing_date',
   'description',
@@ -99,7 +97,6 @@ const fitmentGroupFields = [
   'items.id',
   'items.product_id.id',
   'items.product_id.sku',
-  'items.product_id.oem_number',
   'items.product_id.oem_number',
   'items.product_id.external_weight_kg',
   'items.product_id.weighing_date',
@@ -289,7 +286,7 @@ export function htmlToText(value: string | null): string | undefined {
 function mapProductSummary(record: DirectusProduct): ProductSummary {
   const category = mapCategoryRelation(record.category_id)
   const sku = stringOrUndefined(record.sku) ?? '未设置 SKU'
-  const name = stringOrUndefined(record.oem_number) ?? stringOrUndefined(record.oem_number) ?? sku
+  const name = stringOrUndefined(record.oem_number) ?? sku
 
   return {
     id: record.id,
@@ -365,7 +362,6 @@ function buildFitmentGroupSearchFilter(search: string): DirectusQuery {
       { name: contains },
       { description: contains },
       { items: { product_id: { sku: contains } } },
-      { items: { product_id: { oem_number: contains } } },
       { items: { product_id: { oem_number: contains } } },
       { items: { product_id: { category_id: { name: contains } } } },
       { items: { product_id: { category_id: { description: contains } } } },
